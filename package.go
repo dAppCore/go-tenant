@@ -29,8 +29,9 @@ type PackageFeature struct {
 //
 //	if lim := pkg.GetFeatureLimit("pages"); lim != nil { total += *lim }
 func (p Package) GetFeatureLimit(featureCode string) *int {
+	featureCode = normalizedFeatureCode(featureCode)
 	for _, f := range p.Features {
-		if f.FeatureCode == featureCode {
+		if normalizedFeatureCode(f.FeatureCode) == featureCode {
 			return f.LimitValue
 		}
 	}

@@ -240,6 +240,34 @@ func TestTenant_Can_Good(t *testing.T) {
 	}
 }
 
+func TestTenant_Can_MixedCase_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
+	packages := []Package{{Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "PAGES", LimitValue: intPtr(10)}}}}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetPackages(workspace.UUID, packages); err != nil {
+		t.Fatalf("set packages: %v", err)
+	}
+	if err := cache.SetUsage(workspace.UUID, "PAGES", 3); err != nil {
+		t.Fatalf("set usage: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	result := tenant.Can(context.Background(), workspace, "PaGeS", 0)
+	if !result.IsAllowed() {
+		t.Fatalf("expected mixed-case check to allow, got %+v", result)
+	}
+	if result.Used == nil || *result.Used != 3 {
+		t.Fatalf("expected used=3, got %+v", result.Used)
+	}
+}
+
 func TestTenant_Can_Bad(t *testing.T) {
 	tenant := &Tenant{}
 	if result := tenant.Can(context.Background(), nil, "pages", 0); !result.IsDenied() {

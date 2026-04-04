@@ -263,6 +263,7 @@ func (c *TenantClient) GetBoostsForWorkspace(ctx context.Context, wsUUID string)
 
 // GetCurrentUsage returns total usage count for wsUUID+featureCode since reset boundary.
 func (c *TenantClient) GetCurrentUsage(ctx context.Context, wsUUID, featureCode string) (int, error) {
+	featureCode = normalizedFeatureCode(featureCode)
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/usage/"+url.PathEscape(featureCode), nil)
 	if err != nil {
 		return 0, err
@@ -286,6 +287,7 @@ func (c *TenantClient) RecordUsage(ctx context.Context, wsUUID, featureCode stri
 
 // GetFeature fetches a single feature definition by code.
 func (c *TenantClient) GetFeature(ctx context.Context, code string) (*Feature, error) {
+	code = normalizedFeatureCode(code)
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/features/"+url.PathEscape(code), nil)
 	if err != nil {
 		return nil, err

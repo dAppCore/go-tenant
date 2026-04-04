@@ -145,6 +145,7 @@ type localEntitlementService struct {
 }
 
 func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featureCode string, quantity int) EntitlementResult {
+	featureCode = normalizedFeatureCode(featureCode)
 	if ws == nil {
 		return Deny(featureCode, "no workspace provided", nil, nil)
 	}
@@ -155,7 +156,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	if err != nil {
 		return Deny(featureCode, err.Error(), nil, nil)
 	}
-	poolCode := feature.PoolCode()
+	poolCode := normalizedFeatureCode(feature.PoolCode())
 	packages, _ := s.loadPackages(ctx, ws.UUID)
 	boosts, _ := s.loadBoosts(ctx, ws.UUID)
 	used, _ := s.loadUsage(ctx, ws.UUID, poolCode)
@@ -179,7 +180,8 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	}
 
 	for _, boost := range boosts {
-		if boost.FeatureCode != poolCode && boost.FeatureCode != feature.Code {
+		boostCode := normalizedFeatureCode(boost.FeatureCode)
+		if boostCode != poolCode && boostCode != normalizedFeatureCode(feature.Code) {
 			continue
 		}
 		if !boost.IsUsable() {
@@ -224,6 +226,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 }
 
 func (s *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
+	featureCode = normalizedFeatureCode(featureCode)
 	if ws == nil {
 		return ErrNoWorkspaceContext
 	}
@@ -234,7 +237,7 @@ func (s *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace
 	if err != nil {
 		return err
 	}
-	poolCode := feature.PoolCode()
+	poolCode := normalizedFeatureCode(feature.PoolCode())
 	if s.client != nil {
 		if err := s.client.RecordUsage(ctx, ws.UUID, featureCode, quantity, userID, metadata); err != nil {
 			return err
@@ -263,12 +266,12 @@ func (s *localEntitlementService) GetUsageSummary(ctx context.Context, ws *Works
 			continue
 		}
 		for _, feature := range pkg.Features {
-			codes[feature.FeatureCode] = struct{}{}
+			codes[normalizedFeatureCode(feature.FeatureCode)] = struct{}{}
 		}
 	}
 	boosts, _ := s.loadBoosts(ctx, ws.UUID)
 	for _, boost := range boosts {
-		codes[boost.FeatureCode] = struct{}{}
+		codes[normalizedFeatureCode(boost.FeatureCode)] = struct{}{}
 	}
 
 	items := make([]UsageSummaryItem, 0, len(codes))
@@ -308,6 +311,7 @@ func (s *localEntitlementService) InvalidateWorkspace(wsUUID string) {
 }
 
 func (s *localEntitlementService) loadFeature(ctx context.Context, code string) (*Feature, error) {
+	code = normalizedFeatureCode(code)
 	if s.cache != nil {
 		if feature, ok := s.cache.GetFeature(code); ok {
 			return feature, nil
@@ -365,6 +369,7 @@ func (s *localEntitlementService) loadBoosts(ctx context.Context, wsUUID string)
 }
 
 func (s *localEntitlementService) loadUsage(ctx context.Context, wsUUID, featureCode string) (int, bool) {
+	featureCode = normalizedFeatureCode(featureCode)
 	if s.cache != nil {
 		if used, ok := s.cache.GetUsage(wsUUID, featureCode); ok {
 			return used, true
@@ -384,7 +389,7 @@ func (s *localEntitlementService) loadUsage(ctx context.Context, wsUUID, feature
 }
 
 func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID string, feature *Feature) (*int, bool, *int) {
-	poolCode := feature.PoolCode()
+	poolCode := normalizedFeatureCode(feature.PoolCode())
 	packages, _ := s.loadPackages(ctx, wsUUID)
 	boosts, _ := s.loadBoosts(ctx, wsUUID)
 
@@ -407,7 +412,8 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 	}
 
 	for _, boost := range boosts {
-		if boost.FeatureCode != poolCode && boost.FeatureCode != feature.Code {
+		boostCode := normalizedFeatureCode(boost.FeatureCode)
+		if boostCode != poolCode && boostCode != normalizedFeatureCode(feature.Code) {
 			continue
 		}
 		if !boost.IsUsable() {

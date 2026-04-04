@@ -51,6 +51,7 @@ func (t UserTier) MaxWorkspaces() int {
 //
 //	if u.Tier.HasFeature("api_access") { ... }
 func (t UserTier) HasFeature(code string) bool {
+	code = normalizedFeatureCode(code)
 	switch t {
 	case TierHades:
 		return true

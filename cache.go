@@ -312,6 +312,7 @@ func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
 
 // SetUsage stores the current usage count for a workspace+feature.
 func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
+	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.usage[usageCacheKey(wsUUID, featureCode)] = cacheEntry[int]{value: count, expiresAt: c.now().Add(TTLUsage)}
@@ -323,6 +324,7 @@ func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
 
 // GetUsage retrieves a cached usage count. Returns 0, false on miss.
 func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
+	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.RLock()
 	entry, ok := c.usage[usageCacheKey(wsUUID, featureCode)]
 	c.lock.RUnlock()
@@ -390,10 +392,11 @@ func (c *TenantCache) SetFeature(feature *Feature) error {
 	if feature == nil {
 		return ErrFeatureNotFound
 	}
+	featureCode := normalizedFeatureCode(feature.Code)
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.features[feature.Code] = cacheEntry[*Feature]{value: cloneFeature(feature), expiresAt: c.now().Add(TTLEntitlements)}
-	if err := c.persistJSON(featureGroup(feature.Code), "data", feature, TTLEntitlements); err != nil {
+	c.features[featureCode] = cacheEntry[*Feature]{value: cloneFeature(feature), expiresAt: c.now().Add(TTLEntitlements)}
+	if err := c.persistJSON(featureGroup(featureCode), "data", feature, TTLEntitlements); err != nil {
 		return err
 	}
 	return nil
@@ -401,6 +404,7 @@ func (c *TenantCache) SetFeature(feature *Feature) error {
 
 // GetFeature retrieves a cached feature definition by code.
 func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
+	code = normalizedFeatureCode(code)
 	c.lock.RLock()
 	entry, ok := c.features[code]
 	c.lock.RUnlock()
@@ -467,7 +471,7 @@ func (c *TenantCache) GetUser(uuid string) (*User, bool) {
 }
 
 func usageCacheKey(wsUUID, featureCode string) string {
-	return wsUUID + "\x00" + featureCode
+	return wsUUID + "\x00" + normalizedFeatureCode(featureCode)
 }
 
 func hasUsagePrefix(key, wsUUID string) bool {
@@ -506,7 +510,7 @@ func usagePrefix(wsUUID string) string {
 }
 
 func featureGroup(code string) string {
-	return "feature:" + code
+	return "feature:" + normalizedFeatureCode(code)
 }
 
 func userGroup(uuid string) string {
