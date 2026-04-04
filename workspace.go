@@ -28,6 +28,53 @@ type Workspace struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+// WorkspaceContext is a request-scoped holder for workspace and user values.
+//
+//	ctx := tenant.WorkspaceContext{Context: r.Context()}.
+//		WithWorkspace(ws).
+//		WithUser(user)
+//	ws, _ := ctx.Workspace()
+type WorkspaceContext struct {
+	Context context.Context
+}
+
+func (c WorkspaceContext) baseContext() context.Context {
+	if c.Context != nil {
+		return c.Context
+	}
+	return context.Background()
+}
+
+// WithWorkspace returns a new holder carrying the workspace.
+//
+//	ctx := tenant.WorkspaceContext{}.WithWorkspace(ws)
+func (c WorkspaceContext) WithWorkspace(ws *Workspace) WorkspaceContext {
+	c.Context = WithWorkspace(c.baseContext(), ws)
+	return c
+}
+
+// WithUser returns a new holder carrying the user.
+//
+//	ctx := tenant.WorkspaceContext{}.WithUser(user)
+func (c WorkspaceContext) WithUser(user *User) WorkspaceContext {
+	c.Context = WithUser(c.baseContext(), user)
+	return c
+}
+
+// Workspace resolves the workspace from the holder context.
+//
+//	ws, err := tenant.WorkspaceContext{Context: ctx}.Workspace()
+func (c WorkspaceContext) Workspace() (*Workspace, error) {
+	return WorkspaceFromCtx(c.baseContext())
+}
+
+// User resolves the user from the holder context.
+//
+//	user, err := tenant.WorkspaceContext{Context: ctx}.User()
+func (c WorkspaceContext) User() (*User, error) {
+	return UserFromCtx(c.baseContext())
+}
+
 // contextKey is an unexported type for context keys to prevent collisions.
 type contextKey int
 

@@ -1058,3 +1058,47 @@ func TestWorkspaceContext_Ugly(t *testing.T) {
 		t.Fatal("expected non-nil context")
 	}
 }
+
+func TestWorkspaceContextHolder_Good(t *testing.T) {
+	workspace := &Workspace{UUID: "uuid-1"}
+	user := &User{UUID: "user-1"}
+
+	holder := WorkspaceContext{Context: context.Background()}.
+		WithWorkspace(workspace).
+		WithUser(user)
+
+	gotWorkspace, err := holder.Workspace()
+	if err != nil {
+		t.Fatalf("workspace: %v", err)
+	}
+	if gotWorkspace == nil || gotWorkspace.UUID != "uuid-1" {
+		t.Fatalf("unexpected workspace: %+v", gotWorkspace)
+	}
+
+	gotUser, err := holder.User()
+	if err != nil {
+		t.Fatalf("user: %v", err)
+	}
+	if gotUser == nil || gotUser.UUID != "user-1" {
+		t.Fatalf("unexpected user: %+v", gotUser)
+	}
+}
+
+func TestWorkspaceContextHolder_Bad(t *testing.T) {
+	holder := WorkspaceContext{}
+	if _, err := holder.Workspace(); !errors.Is(err, ErrNoWorkspaceContext) {
+		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
+	}
+	if _, err := holder.User(); !errors.Is(err, ErrNoUserContext) {
+		t.Fatalf("expected ErrNoUserContext, got %v", err)
+	}
+}
+
+func TestWorkspaceContextHolder_Ugly(t *testing.T) {
+	holder := WorkspaceContext{Context: nil}
+	holder = holder.WithWorkspace(nil)
+	holder = holder.WithUser(nil)
+	if holder.Context == nil {
+		t.Fatal("expected holder to keep a usable background context")
+	}
+}

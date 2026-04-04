@@ -59,7 +59,8 @@ func (s *WorkspaceScope) Middleware() func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(WithWorkspace(r.Context(), workspace)))
+			requestContext := WorkspaceContext{Context: r.Context()}.WithWorkspace(workspace)
+			next.ServeHTTP(w, r.WithContext(requestContext.Context))
 		})
 	}
 }
@@ -102,7 +103,8 @@ func (s *WorkspaceScope) ScopeFunc(ctx context.Context, slug string, fn func(con
 	if workspace == nil {
 		return ErrNoWorkspaceContext
 	}
-	return fn(WithWorkspace(ctx, workspace))
+	requestContext := WorkspaceContext{Context: ctx}.WithWorkspace(workspace)
+	return fn(requestContext.Context)
 }
 
 func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
