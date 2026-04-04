@@ -351,6 +351,7 @@ func (tenantService *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string,
 	if tenantService == nil || ws == nil || result.Limit == nil || result.Used == nil {
 		return
 	}
+	featureCode = normalizedFeatureCode(featureCode)
 	pct := result.UsagePercent()
 	if pct == nil {
 		return
@@ -402,7 +403,7 @@ func (tenantService *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string,
 }
 
 func alertStateKey(wsUUID, featureCode string) string {
-	return wsUUID + "\x00" + featureCode
+	return wsUUID + "\x00" + normalizedFeatureCode(featureCode)
 }
 
 func hasAlertPrefix(key, wsUUID string) bool {

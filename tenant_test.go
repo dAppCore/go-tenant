@@ -942,6 +942,24 @@ func TestTenant_CheckUsageAlerts_Good(t *testing.T) {
 	}
 }
 
+func TestTenant_CheckUsageAlerts_MixedCase_Good(t *testing.T) {
+	tenant := &Tenant{}
+	workspace := &Workspace{UUID: "uuid-7"}
+	var fired []int
+	tenant.OnUsageAlert(func(alert UsageAlert) {
+		fired = append(fired, alert.Threshold)
+	})
+
+	limit := 10
+	used := 8
+	tenant.CheckUsageAlerts(workspace, "PaGeS", Allow("pages", &limit, &used))
+	tenant.CheckUsageAlerts(workspace, "pages", Allow("pages", &limit, &used))
+
+	if len(fired) != 1 {
+		t.Fatalf("expected one alert for mixed-case feature codes, got %v", fired)
+	}
+}
+
 func TestTenant_CheckUsageAlerts_Bad(t *testing.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}
