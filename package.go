@@ -37,3 +37,13 @@ func (p Package) GetFeatureLimit(featureCode string) *int {
 	}
 	return nil
 }
+
+func (p Package) includesFeature(featureCode string) bool {
+	featureCode = normalizedFeatureCode(featureCode)
+	for _, feature := range p.Features {
+		if normalizedFeatureCode(feature.FeatureCode) == featureCode {
+			return true
+		}
+	}
+	return false
+}

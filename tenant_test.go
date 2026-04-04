@@ -397,6 +397,55 @@ func TestTenant_Can_UnlimitedFeature_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenant_Can_BooleanPackage_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "api_access", Name: "API Access", Type: FeatureTypeBoolean}
+	packages := []Package{{Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "api_access", LimitValue: nil}}}}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetPackages(workspace.UUID, packages); err != nil {
+		t.Fatalf("set packages: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	result := tenant.Can(context.Background(), workspace, "api_access", 1)
+	if result.IsDenied() {
+		t.Fatalf("expected boolean feature to be allowed by package membership, got %+v", result)
+	}
+	if result.Limit != nil || result.Used != nil || result.Remaining != nil {
+		t.Fatalf("expected boolean feature to have nil usage context, got %+v", result)
+	}
+}
+
+func TestTenant_Can_BooleanEnableBoost_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "api_access", Name: "API Access", Type: FeatureTypeBoolean}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetBoosts(workspace.UUID, []Boost{{FeatureCode: "api_access", Status: BoostStatusActive, BoostType: BoostTypeEnable}}); err != nil {
+		t.Fatalf("set boosts: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	result := tenant.Can(context.Background(), workspace, "api_access", 1)
+	if result.IsDenied() {
+		t.Fatalf("expected boolean feature to be enabled by boost, got %+v", result)
+	}
+	if result.Limit != nil || result.Used != nil || result.Remaining != nil {
+		t.Fatalf("expected boolean feature to have nil usage context, got %+v", result)
+	}
+}
+
 func TestTenant_RecordUsage_Good(t *testing.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
@@ -484,6 +533,36 @@ func TestTenant_RecordUsage_Ugly(t *testing.T) {
 	}
 	if serverUsage != 4 {
 		t.Fatalf("expected server usage=4, got %d", serverUsage)
+	}
+}
+
+func TestTenant_GetUsageSummary_BooleanEnableBoost_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "api_access", Name: "API Access", Type: FeatureTypeBoolean}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetBoosts(workspace.UUID, []Boost{{FeatureCode: "api_access", Status: BoostStatusActive, BoostType: BoostTypeEnable}}); err != nil {
+		t.Fatalf("set boosts: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	items, err := tenant.GetUsageSummary(context.Background(), workspace)
+	if err != nil {
+		t.Fatalf("get usage summary: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one summary item, got %+v", items)
+	}
+	if items[0].FeatureCode != "api_access" {
+		t.Fatalf("unexpected feature code: %+v", items[0])
+	}
+	if items[0].Limit != nil || items[0].Used != nil || items[0].Remaining != nil {
+		t.Fatalf("expected boolean summary item to omit usage counters, got %+v", items[0])
 	}
 }
 
