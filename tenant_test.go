@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"dappco.re/go/core"
+	"dappco.re/go/core/store"
 )
 
 func intPtr(value int) *int {
@@ -99,7 +100,13 @@ func TestFeature_PoolCode_Ugly(t *testing.T) {
 }
 
 func TestTenantCache_SetGet_Good(t *testing.T) {
-	cache := NewTenantCache(nil)
+	st, err := store.New(":memory:")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	defer st.Close()
+
+	cache := NewTenantCache(st)
 	workspace := &Workspace{ID: 7, UUID: "uuid-7", Slug: "acme"}
 	if err := cache.SetWorkspace(workspace); err != nil {
 		t.Fatalf("set workspace: %v", err)
