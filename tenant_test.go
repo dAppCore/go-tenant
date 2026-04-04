@@ -219,6 +219,51 @@ func TestTenant_Can_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenant_Can_BoostOnly_Bad(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetBoosts(workspace.UUID, []Boost{{FeatureCode: "pages", Status: BoostStatusActive, BoostType: BoostTypeAddLimit, LimitValue: 5}}); err != nil {
+		t.Fatalf("set boosts: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	result := tenant.Can(context.Background(), workspace, "pages", 1)
+	if result.IsAllowed() {
+		t.Fatalf("expected denial without a base package, got %+v", result)
+	}
+	if result.Reason == "" {
+		t.Fatal("expected denial reason to be populated")
+	}
+}
+
+func TestTenant_Can_UnlimitedBoost_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetBoosts(workspace.UUID, []Boost{{FeatureCode: "pages", Status: BoostStatusActive, BoostType: BoostTypeUnlimited}}); err != nil {
+		t.Fatalf("set boosts: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	result := tenant.Can(context.Background(), workspace, "pages", 1)
+	if !result.IsAllowed() || !result.Unlimited {
+		t.Fatalf("expected unlimited allowance from boost, got %+v", result)
+	}
+}
+
 func TestTenant_RecordUsage_Good(t *testing.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}

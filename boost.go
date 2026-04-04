@@ -26,7 +26,7 @@ type BoostType string
 
 const (
 	BoostTypeAddLimit  BoostType = "add_limit" // adds N to the package limit
-	BoostTypeEnable    BoostType = "enable"    // enables a boolean feature
+	BoostTypeEnable    BoostType = "enable"    // boolean boost marker in the PHP model
 	BoostTypeUnlimited BoostType = "unlimited" // removes the cap entirely
 )
 

@@ -166,8 +166,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 
 	unlimited := feature.IsUnlimited()
 	limit := 0
-	hasLimit := false
-	hasEnableBoost := false
+	hasPackageLimit := false
 
 	for _, pkg := range packages {
 		if !pkg.IsActive {
@@ -177,7 +176,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 		if limitValue == nil {
 			continue
 		}
-		hasLimit = true
+		hasPackageLimit = true
 		if *limitValue == -1 {
 			unlimited = true
 			break
@@ -195,16 +194,16 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 		switch boost.BoostType {
 		case BoostTypeUnlimited:
 			unlimited = true
-		case BoostTypeEnable:
-			hasEnableBoost = true
 		default:
+			if !hasPackageLimit {
+				continue
+			}
 			remaining := boost.Remaining()
 			if remaining == -1 {
 				unlimited = true
 				continue
 			}
 			if remaining > 0 {
-				hasLimit = true
 				limit += remaining
 			}
 		}
@@ -215,13 +214,13 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	}
 
 	if feature.IsBoolean() {
-		if hasLimit || hasEnableBoost {
-			return EntitlementResult{Allowed: true, FeatureCode: featureCode}
+		if hasPackageLimit {
+			return Allow(featureCode, nil, nil)
 		}
 		return Deny(featureCode, "feature not in any package", nil, nil)
 	}
 
-	if !hasLimit {
+	if !hasPackageLimit {
 		return Deny(featureCode, "feature not in any package", nil, nil)
 	}
 
@@ -398,7 +397,7 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 
 	unlimited := feature.IsUnlimited()
 	limit := 0
-	hasLimit := false
+	hasPackageLimit := false
 
 	for _, pkg := range packages {
 		if !pkg.IsActive {
@@ -408,7 +407,7 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		if limitValue == nil {
 			continue
 		}
-		hasLimit = true
+		hasPackageLimit = true
 		if *limitValue == -1 {
 			unlimited = true
 			break
@@ -427,9 +426,11 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		case BoostTypeUnlimited:
 			unlimited = true
 		case BoostTypeAddLimit:
+			if !hasPackageLimit {
+				continue
+			}
 			remaining := boost.Remaining()
 			if remaining > 0 {
-				hasLimit = true
 				limit += remaining
 			}
 		}
@@ -439,7 +440,7 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		used, _ := s.loadUsage(ctx, wsUUID, poolCode)
 		return nil, true, &used
 	}
-	if !hasLimit {
+	if !hasPackageLimit {
 		used, _ := s.loadUsage(ctx, wsUUID, poolCode)
 		return nil, false, &used
 	}
