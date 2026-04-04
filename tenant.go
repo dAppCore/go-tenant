@@ -157,6 +157,9 @@ func (t *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode str
 	if err := t.entitlements.RecordUsage(ctx, ws, featureCode, quantity, userID, metadata); err != nil {
 		return err
 	}
+	if t.client != nil && t.cache != nil && ws != nil {
+		_ = t.cache.InvalidateWorkspace(ws.UUID)
+	}
 	result := t.Can(ctx, ws, featureCode, 0)
 	t.CheckUsageAlerts(ws, featureCode, result)
 	return nil

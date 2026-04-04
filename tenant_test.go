@@ -5,6 +5,9 @@ package tenant
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -180,6 +183,96 @@ func TestTenant_Can_Ugly(t *testing.T) {
 	result := tenant.Can(context.Background(), &Workspace{UUID: "uuid-7"}, "pages", 0)
 	if !result.IsDenied() {
 		t.Fatalf("expected denial on cache miss, got %+v", result)
+	}
+}
+
+func TestTenant_RecordUsage_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
+	packages := []Package{{Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(10)}}}}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetPackages(workspace.UUID, packages); err != nil {
+		t.Fatalf("set packages: %v", err)
+	}
+	if err := cache.SetUsage(workspace.UUID, "pages", 3); err != nil {
+		t.Fatalf("set usage: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	if err := tenant.RecordUsage(context.Background(), workspace, "pages", 1, nil, nil); err != nil {
+		t.Fatalf("record usage: %v", err)
+	}
+
+	result := tenant.Can(context.Background(), workspace, "pages", 0)
+	if result.Used == nil || *result.Used != 4 {
+		t.Fatalf("expected used=4 after cache-only record, got %+v", result.Used)
+	}
+	if result.IsDenied() {
+		t.Fatalf("expected allowed after cache-only record, got %+v", result)
+	}
+}
+
+func TestTenant_RecordUsage_Bad(t *testing.T) {
+	tenant := &Tenant{}
+	if err := tenant.RecordUsage(context.Background(), nil, "pages", 1, nil, nil); !errors.Is(err, ErrNoWorkspaceContext) {
+		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
+	}
+}
+
+func TestTenant_RecordUsage_Ugly(t *testing.T) {
+	serverUsage := 3
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/features/pages":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":1,"code":"pages","name":"Pages","type":"limit","reset_type":"none","is_active":true}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme/packages":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"id":1,"code":"starter","name":"Starter","is_active":true,"features":[{"feature_code":"pages","limit_value":10}]}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme/boosts":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme/usage/pages":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"count":` + strconv.Itoa(serverUsage) + `}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/workspaces/acme/usage":
+			serverUsage++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "acme", Slug: "acme"}
+	_ = cache.SetWorkspace(workspace)
+	_ = cache.SetFeature(&Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit})
+	_ = cache.SetPackages(workspace.UUID, []Package{{Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(10)}}}})
+	_ = cache.SetUsage(workspace.UUID, "pages", 3)
+
+	tenant := &Tenant{
+		client: NewTenantClient(server.URL, "token"),
+		cache:  cache,
+	}
+
+	if err := tenant.RecordUsage(context.Background(), workspace, "pages", 1, nil, nil); err != nil {
+		t.Fatalf("record usage: %v", err)
+	}
+
+	result := tenant.Can(context.Background(), workspace, "pages", 0)
+	if result.Used == nil || *result.Used != 4 {
+		t.Fatalf("expected refreshed usage=4, got %+v", result.Used)
+	}
+	if serverUsage != 4 {
+		t.Fatalf("expected server usage=4, got %d", serverUsage)
 	}
 }
 
