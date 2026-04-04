@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"dappco.re/go/core"
 )
 
 func intPtr(value int) *int {
@@ -243,6 +245,27 @@ func TestTenant_Can_Ugly(t *testing.T) {
 	result := tenant.Can(context.Background(), &Workspace{UUID: "uuid-7"}, "pages", 0)
 	if !result.IsDenied() {
 		t.Fatalf("expected denial on cache miss, got %+v", result)
+	}
+}
+
+func TestTenant_Register_Good(t *testing.T) {
+	c := core.New()
+	result := Register(c)
+	if !result.OK {
+		t.Fatalf("expected successful registration, got %+v", result.Value)
+	}
+	tenant, ok := result.Value.(*Tenant)
+	if !ok || tenant == nil {
+		t.Fatalf("expected *Tenant value, got %#v", result.Value)
+	}
+	if tenant.ServiceRuntime == nil {
+		t.Fatal("expected service runtime to be initialised")
+	}
+	if tenant.cache == nil {
+		t.Fatal("expected cache to be initialised")
+	}
+	if tenant.entitlements == nil {
+		t.Fatal("expected entitlement service to be initialised")
 	}
 }
 

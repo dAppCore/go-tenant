@@ -15,6 +15,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"dappco.re/go/core"
 )
 
 // Tenant is the root service. Register once per application instance.
@@ -23,6 +25,8 @@ import (
 //	ten := core.MustServiceFor[*tenant.Tenant](c, "tenant")
 //	result := ten.Can(ctx, ws, "pages", 1)
 type Tenant struct {
+	*core.ServiceRuntime[TenantOptions]
+
 	client        *TenantClient
 	cache         *TenantCache
 	entitlements  EntitlementService
@@ -48,8 +52,72 @@ type TenantOptions struct {
 // Register is the Core service factory. Called by core.WithService.
 //
 //	core.New(core.WithService(tenant.Register))
-func Register() {
-	// Core integration is not wired in this checkout.
+func Register(c *core.Core) core.Result {
+	if c == nil {
+		return core.Result{Value: core.E("tenant", "core is nil", nil), OK: false}
+	}
+	options := tenantOptionsFromCore(c)
+	service := &Tenant{
+		ServiceRuntime: core.NewServiceRuntime(c, options),
+	}
+	if options.APIURL != "" && options.APIToken != "" {
+		service.client = NewTenantClient(options.APIURL, options.APIToken, WithTimeout(options.Timeout))
+	}
+	service.cache = NewTenantCache(nil)
+	service.entitlements = NewLocalEntitlementService(service.cache, service.client)
+	return core.Result{Value: service, OK: true}
+}
+
+func tenantOptionsFromCore(c *core.Core) TenantOptions {
+	options := TenantOptions{Timeout: 10 * time.Second}
+	if c == nil || c.Config() == nil {
+		return options
+	}
+	options.APIURL = configString(c, "api_url", "tenant.api_url")
+	options.APIToken = configString(c, "api_token", "tenant.api_token")
+	if timeout := configDuration(c, "timeout", "tenant.timeout"); timeout > 0 {
+		options.Timeout = timeout
+	}
+	return options
+}
+
+func configString(c *core.Core, keys ...string) string {
+	if c == nil || c.Config() == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if value := c.Config().String(key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func configDuration(c *core.Core, keys ...string) time.Duration {
+	if c == nil || c.Config() == nil {
+		return 0
+	}
+	for _, key := range keys {
+		value := c.Config().Get(key)
+		if !value.OK || value.Value == nil {
+			continue
+		}
+		switch typed := value.Value.(type) {
+		case time.Duration:
+			return typed
+		case string:
+			if parsed, err := time.ParseDuration(typed); err == nil {
+				return parsed
+			}
+		case int:
+			return time.Duration(typed) * time.Second
+		case int64:
+			return time.Duration(typed) * time.Second
+		case float64:
+			return time.Duration(typed) * time.Second
+		}
+	}
+	return 0
 }
 
 // GetWorkspace resolves a workspace by slug. Checks cache first, then PHP API.

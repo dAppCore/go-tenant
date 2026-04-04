@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"dappco.re/go/core"
 )
 
 // TenantClient calls the PHP REST API to read and mutate tenant data.
@@ -53,23 +55,23 @@ func WithTimeout(d time.Duration) ClientOption {
 
 func (c *TenantClient) request(ctx context.Context, method, path string, body any) ([]byte, int, error) {
 	if c == nil {
-		return nil, 0, ErrWorkspaceNotFound
+		return nil, 0, core.E("tenant", "tenant client is nil", nil)
 	}
 	endpoint, err := url.JoinPath(c.baseURL, path)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, core.E("tenant", "failed to build api request path", err)
 	}
 	var payload io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, core.E("tenant", "failed to encode api request body", err)
 		}
 		payload = bytes.NewReader(data)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, payload)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, core.E("tenant", "failed to create api request", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
@@ -81,13 +83,13 @@ func (c *TenantClient) request(ctx context.Context, method, path string, body an
 		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "timeout") {
 			return nil, 0, ErrClientTimeout
 		}
-		return nil, 0, err
+		return nil, 0, core.E("tenant", "api request failed", err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, resp.StatusCode, core.E("tenant", "failed to read api response", err)
 	}
 	if resp.StatusCode >= 400 {
 		if len(data) == 0 {
@@ -110,9 +112,9 @@ func (c *TenantClient) statusError(status int, path, body string) error {
 		Error string `json:"error"`
 	}
 	if body != "" && json.Unmarshal([]byte(body), &envelope) == nil && envelope.Error != "" {
-		return errors.New(envelope.Error)
+		return core.E("tenant", envelope.Error, nil)
 	}
-	return errors.New(http.StatusText(status))
+	return core.E("tenant", http.StatusText(status), nil)
 }
 
 func decodeEnvelope[T any](data []byte, target *T) error {
@@ -126,7 +128,7 @@ func decodeEnvelope[T any](data []byte, target *T) error {
 	}
 	if json.Unmarshal(data, &envelope) == nil && (envelope.Data != nil || envelope.Error != "") {
 		if envelope.Error != "" && !envelope.Ok {
-			return errors.New(envelope.Error)
+			return core.E("tenant", envelope.Error, nil)
 		}
 		if len(envelope.Data) > 0 {
 			return json.Unmarshal(envelope.Data, target)
@@ -149,7 +151,7 @@ func decodeCount(data []byte) (int, error) {
 	}
 	if json.Unmarshal(data, &envelope) == nil {
 		if envelope.Error != "" && !envelope.Ok {
-			return 0, errors.New(envelope.Error)
+			return 0, core.E("tenant", envelope.Error, nil)
 		}
 		if envelope.Count != nil {
 			return *envelope.Count, nil
@@ -171,7 +173,7 @@ func decodeCount(data []byte) (int, error) {
 	if err := json.Unmarshal(data, &direct); err == nil {
 		return direct, nil
 	}
-	return 0, errors.New("invalid count payload")
+	return 0, core.E("tenant", "invalid count payload", nil)
 }
 
 // GetWorkspaceBySlug fetches a workspace by its slug.

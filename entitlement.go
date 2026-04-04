@@ -4,7 +4,6 @@ package tenant
 
 import (
 	"context"
-	"errors"
 	"sort"
 )
 
@@ -64,10 +63,7 @@ func (r EntitlementResult) AsError() error {
 	if r.Allowed {
 		return nil
 	}
-	if r.Reason == "" {
-		return ErrEntitlementDenied
-	}
-	return errors.Join(ErrEntitlementDenied, errors.New(r.Reason))
+	return ErrEntitlementDenied
 }
 
 // Allow constructs an allowed result with usage context.
