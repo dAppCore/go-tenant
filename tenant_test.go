@@ -142,6 +142,38 @@ func TestTenantCache_SetGet_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenantCache_SetUser_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	user := &User{UUID: "user-7", Name: "Ada", Email: "ada@example.uk"}
+	if err := cache.SetUser(user); err != nil {
+		t.Fatalf("set user: %v", err)
+	}
+	got, ok := cache.GetUser("user-7")
+	if !ok || got == nil {
+		t.Fatal("expected user cache hit")
+	}
+	if got.UUID != "user-7" || got.Email != "ada@example.uk" {
+		t.Fatalf("unexpected user: %+v", got)
+	}
+}
+
+func TestTenantCache_SetUser_Bad(t *testing.T) {
+	cache := NewTenantCache(nil)
+	if err := cache.SetUser(nil); !errors.Is(err, ErrNoUserContext) {
+		t.Fatalf("expected ErrNoUserContext, got %v", err)
+	}
+}
+
+func TestTenantCache_SetUser_Ugly(t *testing.T) {
+	cache := NewTenantCache(nil)
+	if err := cache.SetUser(&User{Name: "Ada"}); !errors.Is(err, ErrNoUserContext) {
+		t.Fatalf("expected ErrNoUserContext for missing UUID, got %v", err)
+	}
+	if got, ok := cache.GetUser("missing"); ok || got != nil {
+		t.Fatalf("expected user cache miss, got %+v", got)
+	}
+}
+
 func TestTenant_Can_Good(t *testing.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}

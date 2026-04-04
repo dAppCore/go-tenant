@@ -39,6 +39,7 @@ type TenantCache struct {
 	boosts           map[string]cacheEntry[[]Boost]
 	usage            map[string]cacheEntry[int]
 	features         map[string]cacheEntry[*Feature]
+	users            map[string]cacheEntry[*User]
 }
 
 // NewTenantCache creates a new cache backed by the given store handle.
@@ -53,6 +54,7 @@ func NewTenantCache(st any) *TenantCache {
 		boosts:           map[string]cacheEntry[[]Boost]{},
 		usage:            map[string]cacheEntry[int]{},
 		features:         map[string]cacheEntry[*Feature]{},
+		users:            map[string]cacheEntry[*User]{},
 	}
 }
 
@@ -83,6 +85,14 @@ func cloneFeature(feature *Feature) *Feature {
 		return nil
 	}
 	clone := *feature
+	return &clone
+}
+
+func cloneUser(user *User) *User {
+	if user == nil {
+		return nil
+	}
+	clone := *user
 	return &clone
 }
 
@@ -274,6 +284,40 @@ func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
 		return nil, false
 	}
 	return cloneFeature(entry.value), true
+}
+
+// SetUser stores the authenticated user record.
+//
+//	cache.SetUser(user)
+func (c *TenantCache) SetUser(user *User) error {
+	if user == nil {
+		return ErrNoUserContext
+	}
+	if user.UUID == "" {
+		return ErrNoUserContext
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.users[user.UUID] = cacheEntry[*User]{value: cloneUser(user), expiresAt: c.now().Add(TTLUser)}
+	return nil
+}
+
+// GetUser retrieves a cached user by UUID. Returns nil, false on miss.
+//
+//	user, ok := cache.GetUser("550e8400-e29b-41d4-a716-446655440000")
+func (c *TenantCache) GetUser(uuid string) (*User, bool) {
+	c.mu.RLock()
+	entry, ok := c.users[uuid]
+	c.mu.RUnlock()
+	if !ok || entry.expired(c.now()) {
+		if ok {
+			c.mu.Lock()
+			delete(c.users, uuid)
+			c.mu.Unlock()
+		}
+		return nil, false
+	}
+	return cloneUser(entry.value), true
 }
 
 func usageCacheKey(wsUUID, featureCode string) string {
