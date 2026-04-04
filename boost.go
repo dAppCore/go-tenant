@@ -68,9 +68,6 @@ func (b Boost) Remaining() int {
 	case BoostTypeUnlimited:
 		return -1
 	case BoostTypeEnable:
-		if b.Status == BoostStatusActive && b.IsUsable() {
-			return 1
-		}
 		return 0
 	default:
 		remaining := b.LimitValue - b.ConsumedQuantity

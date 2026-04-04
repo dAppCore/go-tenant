@@ -3,7 +3,6 @@
 package tenant
 
 import (
-	"errors"
 	"strconv"
 	"sync"
 	"time"
@@ -520,5 +519,3 @@ func featureGroup(code string) string {
 func userGroup(uuid string) string {
 	return "user:" + uuid
 }
-
-var errCacheMiss = errors.New("cache miss")
