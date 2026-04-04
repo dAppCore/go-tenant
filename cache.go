@@ -31,6 +31,9 @@ func (e cacheEntry) expired(now time.Time) bool {
 // TenantCache provides workspace-scoped caching over go-store with an in-memory
 // hot path. The store is optional, but when present it persists the same TTL
 // semantics as the RFC cache contract.
+//
+//	cache := tenant.NewTenantCache(storeHandle)
+//	cache.SetWorkspace(&tenant.Workspace{UUID: "ws-7", Slug: "acme"})
 type TenantCache struct {
 	store *store.Store
 
@@ -47,8 +50,8 @@ type TenantCache struct {
 
 // NewTenantCache creates a new cache backed by the given store handle.
 //
-//	st, _ := store.New(":memory:")
-//	tenantCache := tenant.NewTenantCache(st)
+//	storeHandle, _ := store.New(":memory:")
+//	cache := tenant.NewTenantCache(storeHandle)
 func NewTenantCache(st *store.Store) *TenantCache {
 	return &TenantCache{
 		store:            st,

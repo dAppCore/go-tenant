@@ -30,10 +30,9 @@ type Workspace struct {
 
 // WorkspaceContext is a request-scoped holder for workspace and user values.
 //
-//	contextHolder := tenant.WorkspaceContext{Context: r.Context()}.
-//		WithWorkspace(workspace).
-//		WithUser(authenticatedUser)
-//	ws, _ := contextHolder.Workspace()
+//	ctxHolder := tenant.WorkspaceContext{Context: r.Context()}.
+//		WithWorkspace(&tenant.Workspace{UUID: "ws-7", Slug: "acme"}).
+//		WithUser(&tenant.User{UUID: "user-9", Email: "ada@example.uk"})
 type WorkspaceContext struct {
 	Context context.Context
 }

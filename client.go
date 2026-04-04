@@ -27,7 +27,7 @@ type TenantClient struct {
 
 // ClientOption applies a TenantClient setting.
 //
-//	client := tenant.NewTenantClient(url, token, tenant.WithTimeout(5*time.Second))
+//	client := tenant.NewTenantClient("https://api.host.uk.com", "secret", tenant.WithTimeout(5*time.Second))
 type ClientOption func(*TenantClient)
 
 // NewTenantClient creates a new PHP API transport with the given base URL and bearer token.
