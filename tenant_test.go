@@ -689,6 +689,62 @@ func TestTenant_GetWorkspaceByID_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenant_GetUser_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	cached := &User{UUID: "user-7", Email: "cached@example.uk", Name: "Cached"}
+	if err := cache.SetUser(cached); err != nil {
+		t.Fatalf("set user: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	ctx := WithUser(context.Background(), &User{UUID: "user-7"})
+	got, err := tenant.GetUser(ctx)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if got == nil || got.Email != "cached@example.uk" {
+		t.Fatalf("unexpected user: %+v", got)
+	}
+}
+
+func TestTenant_GetUser_Bad(t *testing.T) {
+	tenant := &Tenant{cache: NewTenantCache(nil)}
+	if _, err := tenant.GetUser(context.Background()); !errors.Is(err, ErrNoUserContext) {
+		t.Fatalf("expected ErrNoUserContext, got %v", err)
+	}
+}
+
+func TestTenant_GetUser_Ugly(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/user" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"uuid":"user-9","email":"ada@example.uk","name":"Ada"}`))
+	}))
+	defer server.Close()
+
+	cache := NewTenantCache(nil)
+	tenant := &Tenant{cache: cache, client: NewTenantClient(server.URL, "token")}
+	got, err := tenant.GetUser(context.Background())
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if got == nil || got.UUID != "user-9" {
+		t.Fatalf("unexpected user: %+v", got)
+	}
+	cached, ok := cache.GetUser("user-9")
+	if !ok || cached == nil || cached.Email != "ada@example.uk" {
+		t.Fatalf("expected fetched user to be cached, got %+v ok=%v", cached, ok)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("expected one api call, got %d", hits.Load())
+	}
+}
+
 func TestTenant_GetUsageSummary_NonStackablePackagesUseHighestLimit_Good(t *testing.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
@@ -833,6 +889,26 @@ func TestTenant_CheckUsageAlerts_Ugly(t *testing.T) {
 
 	if len(fired) != 2 {
 		t.Fatalf("expected alerts to retrigger after usage reset, got %v", fired)
+	}
+}
+
+func TestTenant_CheckUsageAlerts_PanicHandler_Good(t *testing.T) {
+	tenant := &Tenant{}
+	workspace := &Workspace{UUID: "uuid-7"}
+	var fired []int
+	tenant.OnUsageAlert(func(alert UsageAlert) {
+		panic("boom")
+	})
+	tenant.OnUsageAlert(func(alert UsageAlert) {
+		fired = append(fired, alert.Threshold)
+	})
+
+	limit := 10
+	used := 8
+	tenant.CheckUsageAlerts(workspace, "pages", Allow("pages", &limit, &used))
+
+	if len(fired) != 1 || fired[0] != AlertThresholdWarning {
+		t.Fatalf("expected panic in first handler to not block second handler, got %v", fired)
 	}
 }
 

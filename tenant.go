@@ -6,7 +6,7 @@
 // The Go layer is a consumer — PHP owns the database. Go calls PHP's REST API
 // for all mutations and queries, then caches the results locally via go-store.
 //
-//	ten := core.MustServiceFor[*tenant.Tenant](c, "tenant")
+//	ten, _ := core.ServiceFor[*tenant.Tenant](c, "tenant")
 //	result := ten.Can(ctx, ws, "pages", 1)
 //	if result.IsDenied() { return core.E("pages", result.Reason, nil) }
 package tenant
@@ -22,7 +22,7 @@ import (
 // Tenant is the root service. Register once per application instance.
 // All tenant operations flow through this type.
 //
-//	ten := core.MustServiceFor[*tenant.Tenant](c, "tenant")
+//	ten, _ := core.ServiceFor[*tenant.Tenant](c, "tenant")
 //	result := ten.Can(ctx, ws, "pages", 1)
 type Tenant struct {
 	*core.ServiceRuntime[TenantOptions]
@@ -50,8 +50,6 @@ type TenantOptions struct {
 }
 
 // Register is the Core service factory. Called by core.WithService.
-//
-//	core.New(core.WithService(tenant.Register))
 //
 //	core.New(core.WithService(tenant.Register))
 func Register(c *core.Core) core.Result {
@@ -183,6 +181,36 @@ func (t *Tenant) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, er
 		return workspace, nil
 	}
 	return nil, ErrWorkspaceNotFound
+}
+
+// GetUser resolves the authenticated user for ctx.
+// Prefers context/cache when a user is already attached; otherwise falls back to the PHP API.
+//
+//	user, err := ten.GetUser(ctx)
+func (t *Tenant) GetUser(ctx context.Context) (*User, error) {
+	if t == nil {
+		return nil, ErrNoUserContext
+	}
+	if user, err := UserFromCtx(ctx); err == nil && user != nil {
+		if t.cache != nil {
+			if cached, ok := t.cache.GetUser(user.UUID); ok {
+				return cached, nil
+			}
+			_ = t.cache.SetUser(user)
+		}
+		return cloneUser(user), nil
+	}
+	if t.client == nil {
+		return nil, ErrNoUserContext
+	}
+	user, err := t.client.GetUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if t.cache != nil {
+		_ = t.cache.SetUser(user)
+	}
+	return user, nil
 }
 
 // GetWorkspaceBySubdomain resolves the workspace for an incoming hostname.
@@ -351,7 +379,12 @@ func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result Enti
 
 	for _, alert := range alerts {
 		for _, handler := range handlers {
-			handler(alert)
+			func() {
+				defer func() {
+					_ = recover()
+				}()
+				handler(alert)
+			}()
 		}
 	}
 }
