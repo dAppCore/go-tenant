@@ -704,6 +704,39 @@ func TestTenant_GetWorkspaceByID_Good(t *testing.T) {
 	}
 }
 
+func TestTenant_GetWorkspaceByID_RemoteGood(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/workspaces/id/42" {
+			http.NotFound(w, r)
+			return
+		}
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":42,"uuid":"uuid-42","slug":"acme","name":"Acme","is_active":true}`))
+	}))
+	defer server.Close()
+
+	tenant := &Tenant{
+		cache:  NewTenantCache(nil),
+		client: NewTenantClient(server.URL, "token"),
+	}
+	got, err := tenant.GetWorkspaceByID(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("get workspace: %v", err)
+	}
+	if got == nil || got.UUID != "uuid-42" {
+		t.Fatalf("unexpected workspace: %+v", got)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("expected one api call, got %d", hits.Load())
+	}
+	cached, ok := tenant.cache.GetWorkspaceByID(42)
+	if !ok || cached == nil || cached.UUID != "uuid-42" {
+		t.Fatalf("expected fetched workspace to be cached, got %+v ok=%v", cached, ok)
+	}
+}
+
 func TestTenant_GetWorkspaceByID_Bad(t *testing.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
 	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !errors.Is(err, ErrWorkspaceNotFound) {
@@ -1013,6 +1046,42 @@ func TestWorkspaceScope_Middleware_InvalidID_Bad(t *testing.T) {
 	}
 	if handlerCalled {
 		t.Fatal("expected request to stop before handler")
+	}
+}
+
+func TestWorkspaceScope_Middleware_IDRemoteGood(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/workspaces/id/42" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":42,"uuid":"uuid-42","slug":"acme","name":"Acme","is_active":true}`))
+	}))
+	defer server.Close()
+
+	tenant := &Tenant{
+		cache:  NewTenantCache(nil),
+		client: NewTenantClient(server.URL, "token"),
+	}
+	scope := NewWorkspaceScope(tenant)
+
+	var got *Workspace
+	handler := scope.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, _ = WorkspaceFromCtx(r.Context())
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	req.Header.Set("X-Workspace-ID", "42")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if got == nil || got.UUID != "uuid-42" {
+		t.Fatalf("unexpected workspace: %+v", got)
 	}
 }
 

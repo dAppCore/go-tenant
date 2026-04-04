@@ -170,21 +170,32 @@ func (t *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspac
 	return workspace, nil
 }
 
-// GetWorkspaceByID resolves a workspace by integer ID from the local cache.
+// GetWorkspaceByID resolves a workspace by integer ID.
 //
 //	ws, err := ten.GetWorkspaceByID(ctx, 42)
 func (t *Tenant) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, error) {
-	if t == nil || t.cache == nil {
+	if t == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	if workspace, ok := t.cache.GetWorkspaceByID(id); ok {
-		return workspace, nil
+	if t.cache != nil {
+		if workspace, ok := t.cache.GetWorkspaceByID(id); ok {
+			return workspace, nil
+		}
 	}
-	return nil, ErrWorkspaceNotFound
+	if t.client == nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	workspace, err := t.client.GetWorkspaceByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if t.cache != nil {
+		_ = t.cache.SetWorkspace(workspace)
+	}
+	return workspace, nil
 }
 
 // GetUser resolves the authenticated user for ctx.
-// Prefers context/cache when a user is already attached; otherwise falls back to the PHP API.
 //
 //	user, err := ten.GetUser(ctx)
 func (t *Tenant) GetUser(ctx context.Context) (*User, error) {

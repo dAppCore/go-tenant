@@ -233,6 +233,21 @@ func (c *TenantClient) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Wo
 	return &workspace, nil
 }
 
+// GetWorkspaceByID fetches a workspace by integer ID.
+//
+//	workspace, err := client.GetWorkspaceByID(ctx, 42)
+func (c *TenantClient) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, error) {
+	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/id/"+strconv.FormatInt(id, 10), nil)
+	if err != nil {
+		return nil, err
+	}
+	var workspace Workspace
+	if err := decodeEnvelope(data, &workspace); err != nil {
+		return nil, err
+	}
+	return &workspace, nil
+}
+
 // GetWorkspaceBySubdomain resolves a hostname to a workspace.
 // It checks the slug first, then falls back to the domain-prefix endpoint.
 //
