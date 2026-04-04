@@ -123,24 +123,24 @@ func coreConfigDurationValue(c *core.Core, keys ...string) time.Duration {
 // GetWorkspace resolves a workspace by slug. Checks cache first, then PHP API.
 //
 //	ws, err := ten.GetWorkspace(ctx, "acme")
-func (t *Tenant) GetWorkspace(ctx context.Context, slug string) (*Workspace, error) {
-	if t == nil {
+func (tenantService *Tenant) GetWorkspace(ctx context.Context, slug string) (*Workspace, error) {
+	if tenantService == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	if t.cache != nil {
-		if workspace, ok := t.cache.GetWorkspaceBySlug(slug); ok {
+	if tenantService.cache != nil {
+		if workspace, ok := tenantService.cache.GetWorkspaceBySlug(slug); ok {
 			return workspace, nil
 		}
 	}
-	if t.client == nil {
+	if tenantService.client == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	workspace, err := t.client.GetWorkspaceBySlug(ctx, slug)
+	workspace, err := tenantService.client.GetWorkspaceBySlug(ctx, slug)
 	if err != nil {
 		return nil, err
 	}
-	if t.cache != nil {
-		_ = t.cache.SetWorkspace(workspace)
+	if tenantService.cache != nil {
+		_ = tenantService.cache.SetWorkspace(workspace)
 	}
 	return workspace, nil
 }
@@ -148,24 +148,24 @@ func (t *Tenant) GetWorkspace(ctx context.Context, slug string) (*Workspace, err
 // GetWorkspaceByUUID resolves a workspace by UUID.
 //
 //	ws, err := ten.GetWorkspaceByUUID(ctx, "550e8400-...")
-func (t *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspace, error) {
-	if t == nil {
+func (tenantService *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspace, error) {
+	if tenantService == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	if t.cache != nil {
-		if workspace, ok := t.cache.GetWorkspace(uuid); ok {
+	if tenantService.cache != nil {
+		if workspace, ok := tenantService.cache.GetWorkspace(uuid); ok {
 			return workspace, nil
 		}
 	}
-	if t.client == nil {
+	if tenantService.client == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	workspace, err := t.client.GetWorkspaceByUUID(ctx, uuid)
+	workspace, err := tenantService.client.GetWorkspaceByUUID(ctx, uuid)
 	if err != nil {
 		return nil, err
 	}
-	if t.cache != nil {
-		_ = t.cache.SetWorkspace(workspace)
+	if tenantService.cache != nil {
+		_ = tenantService.cache.SetWorkspace(workspace)
 	}
 	return workspace, nil
 }
@@ -173,24 +173,24 @@ func (t *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspac
 // GetWorkspaceByID resolves a workspace by integer ID.
 //
 //	ws, err := ten.GetWorkspaceByID(ctx, 42)
-func (t *Tenant) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, error) {
-	if t == nil {
+func (tenantService *Tenant) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, error) {
+	if tenantService == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	if t.cache != nil {
-		if workspace, ok := t.cache.GetWorkspaceByID(id); ok {
+	if tenantService.cache != nil {
+		if workspace, ok := tenantService.cache.GetWorkspaceByID(id); ok {
 			return workspace, nil
 		}
 	}
-	if t.client == nil {
+	if tenantService.client == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	workspace, err := t.client.GetWorkspaceByID(ctx, id)
+	workspace, err := tenantService.client.GetWorkspaceByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if t.cache != nil {
-		_ = t.cache.SetWorkspace(workspace)
+	if tenantService.cache != nil {
+		_ = tenantService.cache.SetWorkspace(workspace)
 	}
 	return workspace, nil
 }
@@ -198,28 +198,28 @@ func (t *Tenant) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, er
 // GetUser resolves the authenticated user for ctx.
 //
 //	user, err := ten.GetUser(ctx)
-func (t *Tenant) GetUser(ctx context.Context) (*User, error) {
-	if t == nil {
+func (tenantService *Tenant) GetUser(ctx context.Context) (*User, error) {
+	if tenantService == nil {
 		return nil, ErrNoUserContext
 	}
 	if user, err := UserFromCtx(ctx); err == nil && user != nil {
-		if t.cache != nil {
-			if cached, ok := t.cache.GetUser(user.UUID); ok {
+		if tenantService.cache != nil {
+			if cached, ok := tenantService.cache.GetUser(user.UUID); ok {
 				return cached, nil
 			}
-			_ = t.cache.SetUser(user)
+			_ = tenantService.cache.SetUser(user)
 		}
 		return cloneUser(user), nil
 	}
-	if t.client == nil {
+	if tenantService.client == nil {
 		return nil, ErrNoUserContext
 	}
-	user, err := t.client.GetUser(ctx)
+	user, err := tenantService.client.GetUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if t.cache != nil {
-		_ = t.cache.SetUser(user)
+	if tenantService.cache != nil {
+		_ = tenantService.cache.SetUser(user)
 	}
 	return user, nil
 }
@@ -227,25 +227,25 @@ func (t *Tenant) GetUser(ctx context.Context) (*User, error) {
 // GetWorkspaceBySubdomain resolves the workspace for an incoming hostname.
 //
 //	workspace, err := tenantService.GetWorkspaceBySubdomain(ctx, "acme.host.uk.com")
-func (t *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
-	if t == nil {
+func (tenantService *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
+	if tenantService == nil {
 		return nil, ErrWorkspaceNotFound
 	}
 	slug := workspaceSlugFromHost(host)
 	if slug != "" {
-		if workspace, err := t.GetWorkspace(ctx, slug); err == nil {
+		if workspace, err := tenantService.GetWorkspace(ctx, slug); err == nil {
 			return workspace, nil
 		}
 	}
-	if t.client == nil {
+	if tenantService.client == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	workspace, err := t.client.GetWorkspaceBySubdomain(ctx, host)
+	workspace, err := tenantService.client.GetWorkspaceBySubdomain(ctx, host)
 	if err != nil {
 		return nil, err
 	}
-	if t.cache != nil {
-		_ = t.cache.SetWorkspace(workspace)
+	if tenantService.cache != nil {
+		_ = tenantService.cache.SetWorkspace(workspace)
 	}
 	return workspace, nil
 }
@@ -253,89 +253,89 @@ func (t *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Wor
 // Can checks whether ws can consume quantity units of featureCode.
 //
 //	result := tenantService.Can(ctx, workspace, "pages", 1)
-func (t *Tenant) Can(ctx context.Context, ws *Workspace, featureCode string, quantity int) EntitlementResult {
-	if t == nil {
+func (tenantService *Tenant) Can(ctx context.Context, ws *Workspace, featureCode string, quantity int) EntitlementResult {
+	if tenantService == nil {
 		return Deny(featureCode, "tenant not configured", nil, nil)
 	}
-	if t.entitlements == nil {
-		t.entitlements = NewLocalEntitlementService(t.cache, t.client)
+	if tenantService.entitlements == nil {
+		tenantService.entitlements = NewLocalEntitlementService(tenantService.cache, tenantService.client)
 	}
-	return t.entitlements.Can(ctx, ws, featureCode, quantity)
+	return tenantService.entitlements.Can(ctx, ws, featureCode, quantity)
 }
 
 // RecordUsage records feature consumption for ws after a successful operation.
 //
 //	tenantService.RecordUsage(ctx, workspace, "pages", 1, &userID, nil)
-func (t *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
-	if t == nil {
+func (tenantService *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
+	if tenantService == nil {
 		return ErrNoWorkspaceContext
 	}
-	if t.entitlements == nil {
-		t.entitlements = NewLocalEntitlementService(t.cache, t.client)
+	if tenantService.entitlements == nil {
+		tenantService.entitlements = NewLocalEntitlementService(tenantService.cache, tenantService.client)
 	}
-	if err := t.entitlements.RecordUsage(ctx, ws, featureCode, quantity, userID, metadata); err != nil {
+	if err := tenantService.entitlements.RecordUsage(ctx, ws, featureCode, quantity, userID, metadata); err != nil {
 		return err
 	}
-	result := t.Can(ctx, ws, featureCode, 0)
-	t.CheckUsageAlerts(ws, featureCode, result)
+	result := tenantService.Can(ctx, ws, featureCode, 0)
+	tenantService.CheckUsageAlerts(ws, featureCode, result)
 	return nil
 }
 
 // GetUsageSummary returns all features with their current usage for ws.
 //
 //	items, err := tenantService.GetUsageSummary(ctx, workspace)
-func (t *Tenant) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error) {
-	if t == nil {
+func (tenantService *Tenant) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error) {
+	if tenantService == nil {
 		return nil, ErrNoWorkspaceContext
 	}
-	if t.entitlements == nil {
-		t.entitlements = NewLocalEntitlementService(t.cache, t.client)
+	if tenantService.entitlements == nil {
+		tenantService.entitlements = NewLocalEntitlementService(tenantService.cache, tenantService.client)
 	}
-	return t.entitlements.GetUsageSummary(ctx, ws)
+	return tenantService.entitlements.GetUsageSummary(ctx, ws)
 }
 
 // InvalidateWorkspace drops the local cache for ws.
 //
 //	tenantService.InvalidateWorkspace("workspace-uuid")
-func (t *Tenant) InvalidateWorkspace(wsUUID string) {
-	if t == nil {
+func (tenantService *Tenant) InvalidateWorkspace(wsUUID string) {
+	if tenantService == nil {
 		return
 	}
-	if t.entitlements != nil {
-		t.entitlements.InvalidateWorkspace(wsUUID)
+	if tenantService.entitlements != nil {
+		tenantService.entitlements.InvalidateWorkspace(wsUUID)
 	}
-	if t.cache != nil {
-		_ = t.cache.InvalidateWorkspace(wsUUID)
+	if tenantService.cache != nil {
+		_ = tenantService.cache.InvalidateWorkspace(wsUUID)
 	}
-	t.lock.Lock()
-	if len(t.alertState) > 0 {
-		for key := range t.alertState {
+	tenantService.lock.Lock()
+	if len(tenantService.alertState) > 0 {
+		for key := range tenantService.alertState {
 			if hasAlertPrefix(key, wsUUID) {
-				delete(t.alertState, key)
+				delete(tenantService.alertState, key)
 			}
 		}
 	}
-	t.lock.Unlock()
+	tenantService.lock.Unlock()
 }
 
 // OnUsageAlert registers a handler invoked when a usage threshold is crossed.
 // Multiple handlers can be registered; all fire in registration order.
 //
 //	tenantService.OnUsageAlert(func(alert tenant.UsageAlert) { notify(alert.WorkspaceUUID, alert.Threshold) })
-func (t *Tenant) OnUsageAlert(h AlertHandler) {
-	if t == nil || h == nil {
+func (tenantService *Tenant) OnUsageAlert(h AlertHandler) {
+	if tenantService == nil || h == nil {
 		return
 	}
-	t.lock.Lock()
-	t.alertHandlers = append(t.alertHandlers, h)
-	t.lock.Unlock()
+	tenantService.lock.Lock()
+	tenantService.alertHandlers = append(tenantService.alertHandlers, h)
+	tenantService.lock.Unlock()
 }
 
 // Scope returns a configured WorkspaceScope for middleware wiring.
 //
 //	router.Use(tenantService.Scope().Middleware())
-func (t *Tenant) Scope() *WorkspaceScope {
-	return NewWorkspaceScope(t)
+func (tenantService *Tenant) Scope() *WorkspaceScope {
+	return NewWorkspaceScope(tenantService)
 }
 
 // CheckUsageAlerts inspects an EntitlementResult after RecordUsage and fires
@@ -343,8 +343,8 @@ func (t *Tenant) Scope() *WorkspaceScope {
 // Called internally by Tenant.RecordUsage — not usually called directly.
 //
 //	tenantService.CheckUsageAlerts(workspace, "pages", result)
-func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result EntitlementResult) {
-	if t == nil || ws == nil || result.Limit == nil || result.Used == nil {
+func (tenantService *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result EntitlementResult) {
+	if tenantService == nil || ws == nil || result.Limit == nil || result.Used == nil {
 		return
 	}
 	pct := result.UsagePercent()
@@ -357,8 +357,8 @@ func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result Enti
 	key := alertStateKey(ws.UUID, featureCode)
 	now := time.Now()
 
-	t.lock.Lock()
-	state := t.alertState[key]
+	tenantService.lock.Lock()
+	state := tenantService.alertState[key]
 	if used < state.lastUsedCount {
 		state.highestTriggeredLevel = 0
 	}
@@ -378,12 +378,12 @@ func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result Enti
 		}
 	}
 	state.lastUsedCount = used
-	if t.alertState == nil {
-		t.alertState = map[string]usageAlertTracker{}
+	if tenantService.alertState == nil {
+		tenantService.alertState = map[string]usageAlertTracker{}
 	}
-	t.alertState[key] = state
-	handlers := append([]AlertHandler(nil), t.alertHandlers...)
-	t.lock.Unlock()
+	tenantService.alertState[key] = state
+	handlers := append([]AlertHandler(nil), tenantService.alertHandlers...)
+	tenantService.lock.Unlock()
 
 	for _, alert := range alerts {
 		for _, handler := range handlers {

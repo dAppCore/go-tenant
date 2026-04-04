@@ -153,7 +153,7 @@ type featureLimitSnapshot struct {
 	Unlimited            bool
 }
 
-func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featureCode string, quantity int) EntitlementResult {
+func (entitlementService *localEntitlementService) Can(ctx context.Context, ws *Workspace, featureCode string, quantity int) EntitlementResult {
 	featureCode = normalizedFeatureCode(featureCode)
 	if ws == nil {
 		return Deny(featureCode, "no workspace provided", nil, nil)
@@ -161,14 +161,14 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	if quantity < 0 {
 		quantity = 1
 	}
-	feature, err := s.loadFeature(ctx, featureCode)
+	feature, err := entitlementService.loadFeature(ctx, featureCode)
 	if err != nil {
 		return Deny(featureCode, err.Error(), nil, nil)
 	}
 	poolCode := normalizedFeatureCode(feature.PoolCode())
-	packages, _ := s.loadPackages(ctx, ws.UUID)
-	boosts, _ := s.loadBoosts(ctx, ws.UUID)
-	used, _ := s.loadUsage(ctx, ws.UUID, poolCode)
+	packages, _ := entitlementService.loadPackages(ctx, ws.UUID)
+	boosts, _ := entitlementService.loadBoosts(ctx, ws.UUID)
+	used, _ := entitlementService.loadUsage(ctx, ws.UUID, poolCode)
 
 	packageLimit := packageLimitForFeature(packages, poolCode)
 	if packageLimit.Unlimited {
@@ -224,7 +224,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	return Allow(featureCode, &packageLimit.Limit, &used)
 }
 
-func (s *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
+func (entitlementService *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
 	featureCode = normalizedFeatureCode(featureCode)
 	if ws == nil {
 		return ErrNoWorkspaceContext
@@ -232,34 +232,34 @@ func (s *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace
 	if quantity <= 0 {
 		quantity = 1
 	}
-	feature, err := s.loadFeature(ctx, featureCode)
+	feature, err := entitlementService.loadFeature(ctx, featureCode)
 	if err != nil {
 		return err
 	}
 	poolCode := normalizedFeatureCode(feature.PoolCode())
-	if s.client != nil {
-		if err := s.client.RecordUsage(ctx, ws.UUID, featureCode, quantity, userID, metadata); err != nil {
+	if entitlementService.client != nil {
+		if err := entitlementService.client.RecordUsage(ctx, ws.UUID, featureCode, quantity, userID, metadata); err != nil {
 			return err
 		}
 	}
-	if s.cache != nil {
-		if s.client != nil {
-			s.cache.invalidateUsage(ws.UUID, poolCode)
-		} else if used, ok := s.cache.GetUsage(ws.UUID, poolCode); ok {
-			_ = s.cache.SetUsage(ws.UUID, poolCode, used+quantity)
+	if entitlementService.cache != nil {
+		if entitlementService.client != nil {
+			entitlementService.cache.invalidateUsage(ws.UUID, poolCode)
+		} else if used, ok := entitlementService.cache.GetUsage(ws.UUID, poolCode); ok {
+			_ = entitlementService.cache.SetUsage(ws.UUID, poolCode, used+quantity)
 		} else {
-			_ = s.cache.SetUsage(ws.UUID, poolCode, quantity)
+			_ = entitlementService.cache.SetUsage(ws.UUID, poolCode, quantity)
 		}
 	}
 	return nil
 }
 
-func (s *localEntitlementService) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error) {
+func (entitlementService *localEntitlementService) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error) {
 	if ws == nil {
 		return nil, ErrNoWorkspaceContext
 	}
 	codes := map[string]struct{}{}
-	packages, _ := s.loadPackages(ctx, ws.UUID)
+	packages, _ := entitlementService.loadPackages(ctx, ws.UUID)
 	for _, pkg := range packages {
 		if !pkg.IsActive {
 			continue
@@ -268,18 +268,18 @@ func (s *localEntitlementService) GetUsageSummary(ctx context.Context, ws *Works
 			codes[normalizedFeatureCode(feature.FeatureCode)] = struct{}{}
 		}
 	}
-	boosts, _ := s.loadBoosts(ctx, ws.UUID)
+	boosts, _ := entitlementService.loadBoosts(ctx, ws.UUID)
 	for _, boost := range boosts {
 		codes[normalizedFeatureCode(boost.FeatureCode)] = struct{}{}
 	}
 
 	items := make([]UsageSummaryItem, 0, len(codes))
 	for code := range codes {
-		feature, _ := s.loadFeature(ctx, code)
+		feature, _ := entitlementService.loadFeature(ctx, code)
 		if feature == nil {
 			feature = &Feature{Code: code, Name: code}
 		}
-		limit, unlimited, used := s.summaryForFeature(ctx, ws.UUID, feature)
+		limit, unlimited, used := entitlementService.summaryForFeature(ctx, ws.UUID, feature)
 		item := UsageSummaryItem{
 			FeatureCode: code,
 			FeatureName: feature.Name,
@@ -303,98 +303,98 @@ func (s *localEntitlementService) GetUsageSummary(ctx context.Context, ws *Works
 	return items, nil
 }
 
-func (s *localEntitlementService) InvalidateWorkspace(wsUUID string) {
-	if s.cache != nil {
-		_ = s.cache.InvalidateWorkspace(wsUUID)
+func (entitlementService *localEntitlementService) InvalidateWorkspace(wsUUID string) {
+	if entitlementService.cache != nil {
+		_ = entitlementService.cache.InvalidateWorkspace(wsUUID)
 	}
 }
 
-func (s *localEntitlementService) loadFeature(ctx context.Context, code string) (*Feature, error) {
+func (entitlementService *localEntitlementService) loadFeature(ctx context.Context, code string) (*Feature, error) {
 	code = normalizedFeatureCode(code)
-	if s.cache != nil {
-		if feature, ok := s.cache.GetFeature(code); ok {
+	if entitlementService.cache != nil {
+		if feature, ok := entitlementService.cache.GetFeature(code); ok {
 			return feature, nil
 		}
 	}
-	if s.client == nil {
+	if entitlementService.client == nil {
 		return nil, ErrFeatureNotFound
 	}
-	feature, err := s.client.GetFeature(ctx, code)
+	feature, err := entitlementService.client.GetFeature(ctx, code)
 	if err != nil {
 		return nil, err
 	}
-	if s.cache != nil {
-		_ = s.cache.SetFeature(feature)
+	if entitlementService.cache != nil {
+		_ = entitlementService.cache.SetFeature(feature)
 	}
 	return feature, nil
 }
 
-func (s *localEntitlementService) loadPackages(ctx context.Context, wsUUID string) ([]Package, bool) {
-	if s.cache != nil {
-		if packages, ok := s.cache.GetPackages(wsUUID); ok {
+func (entitlementService *localEntitlementService) loadPackages(ctx context.Context, wsUUID string) ([]Package, bool) {
+	if entitlementService.cache != nil {
+		if packages, ok := entitlementService.cache.GetPackages(wsUUID); ok {
 			return packages, true
 		}
 	}
-	if s.client == nil {
+	if entitlementService.client == nil {
 		return nil, false
 	}
-	packages, err := s.client.GetPackagesForWorkspace(ctx, wsUUID)
+	packages, err := entitlementService.client.GetPackagesForWorkspace(ctx, wsUUID)
 	if err != nil {
 		return nil, false
 	}
-	if s.cache != nil {
-		_ = s.cache.SetPackages(wsUUID, packages)
+	if entitlementService.cache != nil {
+		_ = entitlementService.cache.SetPackages(wsUUID, packages)
 	}
 	return packages, true
 }
 
-func (s *localEntitlementService) loadBoosts(ctx context.Context, wsUUID string) ([]Boost, bool) {
-	if s.cache != nil {
-		if boosts, ok := s.cache.GetBoosts(wsUUID); ok {
+func (entitlementService *localEntitlementService) loadBoosts(ctx context.Context, wsUUID string) ([]Boost, bool) {
+	if entitlementService.cache != nil {
+		if boosts, ok := entitlementService.cache.GetBoosts(wsUUID); ok {
 			return boosts, true
 		}
 	}
-	if s.client == nil {
+	if entitlementService.client == nil {
 		return nil, false
 	}
-	boosts, err := s.client.GetBoostsForWorkspace(ctx, wsUUID)
+	boosts, err := entitlementService.client.GetBoostsForWorkspace(ctx, wsUUID)
 	if err != nil {
 		return nil, false
 	}
-	if s.cache != nil {
-		_ = s.cache.SetBoosts(wsUUID, boosts)
+	if entitlementService.cache != nil {
+		_ = entitlementService.cache.SetBoosts(wsUUID, boosts)
 	}
 	return boosts, true
 }
 
-func (s *localEntitlementService) loadUsage(ctx context.Context, wsUUID, featureCode string) (int, bool) {
+func (entitlementService *localEntitlementService) loadUsage(ctx context.Context, wsUUID, featureCode string) (int, bool) {
 	featureCode = normalizedFeatureCode(featureCode)
-	if s.cache != nil {
-		if used, ok := s.cache.GetUsage(wsUUID, featureCode); ok {
+	if entitlementService.cache != nil {
+		if used, ok := entitlementService.cache.GetUsage(wsUUID, featureCode); ok {
 			return used, true
 		}
 	}
-	if s.client == nil {
+	if entitlementService.client == nil {
 		return 0, false
 	}
-	used, err := s.client.GetCurrentUsage(ctx, wsUUID, featureCode)
+	used, err := entitlementService.client.GetCurrentUsage(ctx, wsUUID, featureCode)
 	if err != nil {
 		return 0, false
 	}
-	if s.cache != nil {
-		_ = s.cache.SetUsage(wsUUID, featureCode, used)
+	if entitlementService.cache != nil {
+		_ = entitlementService.cache.SetUsage(wsUUID, featureCode, used)
 	}
 	return used, true
 }
 
-func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID string, feature *Feature) (*int, bool, *int) {
+func (entitlementService *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID string, feature *Feature) (*int, bool, *int) {
 	poolCode := normalizedFeatureCode(feature.PoolCode())
-	packages, _ := s.loadPackages(ctx, wsUUID)
-	boosts, _ := s.loadBoosts(ctx, wsUUID)
+	packages, _ := entitlementService.loadPackages(ctx, wsUUID)
+	boosts, _ := entitlementService.loadBoosts(ctx, wsUUID)
 
 	packageLimit := packageLimitForFeature(packages, poolCode)
 	if packageLimit.Unlimited {
-		return nil, true, s.loadUsageCount(ctx, wsUUID, poolCode)
+		return nil, true, entitlementService.loadUsageCount(ctx, wsUUID, poolCode)
 	}
 
 	hasBooleanEnableBoost := false
@@ -408,7 +408,7 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		}
 		switch boost.BoostType {
 		case BoostTypeUnlimited:
-			return nil, true, s.loadUsageCount(ctx, wsUUID, poolCode)
+			return nil, true, entitlementService.loadUsageCount(ctx, wsUUID, poolCode)
 		case BoostTypeEnable:
 			hasBooleanEnableBoost = true
 		case BoostTypeAddLimit:
@@ -424,9 +424,9 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 
 	if feature.IsUnlimited() {
 		if packageLimit.HasFeatureAssignment {
-			return nil, true, s.loadUsageCount(ctx, wsUUID, poolCode)
+			return nil, true, entitlementService.loadUsageCount(ctx, wsUUID, poolCode)
 		}
-		return nil, false, s.loadUsageCount(ctx, wsUUID, poolCode)
+		return nil, false, entitlementService.loadUsageCount(ctx, wsUUID, poolCode)
 	}
 	if feature.IsBoolean() {
 		if packageLimit.HasFeatureAssignment || hasBooleanEnableBoost {
@@ -435,14 +435,14 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		return nil, false, nil
 	}
 	if !packageLimit.HasFeatureAssignment {
-		return nil, false, s.loadUsageCount(ctx, wsUUID, poolCode)
+		return nil, false, entitlementService.loadUsageCount(ctx, wsUUID, poolCode)
 	}
-	used, _ := s.loadUsage(ctx, wsUUID, poolCode)
+	used, _ := entitlementService.loadUsage(ctx, wsUUID, poolCode)
 	return &packageLimit.Limit, false, &used
 }
 
-func (s *localEntitlementService) loadUsageCount(ctx context.Context, wsUUID, featureCode string) *int {
-	used, _ := s.loadUsage(ctx, wsUUID, featureCode)
+func (entitlementService *localEntitlementService) loadUsageCount(ctx context.Context, wsUUID, featureCode string) *int {
+	used, _ := entitlementService.loadUsage(ctx, wsUUID, featureCode)
 	return &used
 }
 
