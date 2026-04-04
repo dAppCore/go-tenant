@@ -5,7 +5,6 @@ package tenant
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -91,7 +90,7 @@ func (c *TenantClient) request(ctx context.Context, method, path string, body an
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || core.Contains(err.Error(), "timeout") {
+		if err == context.DeadlineExceeded || core.Contains(err.Error(), context.DeadlineExceeded.Error()) || core.Contains(err.Error(), "timeout") {
 			return nil, 0, ErrClientTimeout
 		}
 		return nil, 0, core.E("tenant", "api request failed", err)
@@ -241,7 +240,7 @@ func (c *TenantClient) GetWorkspaceBySubdomain(ctx context.Context, host string)
 	if slug := workspaceSlugFromHost(host); slug != "" {
 		if workspace, err := c.GetWorkspaceBySlug(ctx, slug); err == nil {
 			return workspace, nil
-		} else if !errors.Is(err, ErrWorkspaceNotFound) {
+		} else if err != ErrWorkspaceNotFound {
 			return nil, err
 		}
 	}
