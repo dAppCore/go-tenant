@@ -31,7 +31,7 @@ func (e cacheEntry[T]) expired(now time.Time) bool {
 type TenantCache struct {
 	store any
 
-	mu               sync.RWMutex
+	lock             sync.RWMutex
 	workspacesByUUID map[string]cacheEntry[*Workspace]
 	workspaceIDs     map[int64]string
 	workspaceSlugs   map[string]string
@@ -101,8 +101,8 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 	if ws == nil {
 		return ErrNoWorkspaceContext
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
 	for id, uuid := range c.workspaceIDs {
 		if uuid == ws.UUID {
@@ -128,14 +128,14 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 
 // GetWorkspace retrieves a cached workspace by UUID. Returns nil, false on miss.
 func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
-	c.mu.RLock()
+	c.lock.RLock()
 	entry, ok := c.workspacesByUUID[uuid]
-	c.mu.RUnlock()
+	c.lock.RUnlock()
 	if !ok || entry.expired(c.now()) {
 		if ok {
-			c.mu.Lock()
+			c.lock.Lock()
 			delete(c.workspacesByUUID, uuid)
-			c.mu.Unlock()
+			c.lock.Unlock()
 		}
 		return nil, false
 	}
@@ -144,9 +144,9 @@ func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
 
 // GetWorkspaceByID retrieves a cached workspace by integer ID.
 func (c *TenantCache) GetWorkspaceByID(id int64) (*Workspace, bool) {
-	c.mu.RLock()
+	c.lock.RLock()
 	uuid, ok := c.workspaceIDs[id]
-	c.mu.RUnlock()
+	c.lock.RUnlock()
 	if !ok {
 		return nil, false
 	}
@@ -155,9 +155,9 @@ func (c *TenantCache) GetWorkspaceByID(id int64) (*Workspace, bool) {
 
 // GetWorkspaceBySlug retrieves a cached workspace by slug via UUID indirection.
 func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
-	c.mu.RLock()
+	c.lock.RLock()
 	uuid, ok := c.workspaceSlugs[slug]
-	c.mu.RUnlock()
+	c.lock.RUnlock()
 	if !ok {
 		return nil, false
 	}
@@ -166,22 +166,22 @@ func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
 
 // SetPackages stores the active package list for a workspace.
 func (c *TenantCache) SetPackages(wsUUID string, packages []Package) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.packages[wsUUID] = cacheEntry[[]Package]{value: clonePackages(packages), expiresAt: c.now().Add(TTLEntitlements)}
 	return nil
 }
 
 // GetPackages retrieves cached packages. Returns nil, false on miss.
 func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
-	c.mu.RLock()
+	c.lock.RLock()
 	entry, ok := c.packages[wsUUID]
-	c.mu.RUnlock()
+	c.lock.RUnlock()
 	if !ok || entry.expired(c.now()) {
 		if ok {
-			c.mu.Lock()
+			c.lock.Lock()
 			delete(c.packages, wsUUID)
-			c.mu.Unlock()
+			c.lock.Unlock()
 		}
 		return nil, false
 	}
@@ -190,22 +190,22 @@ func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
 
 // SetBoosts stores the active boost list for a workspace.
 func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.boosts[wsUUID] = cacheEntry[[]Boost]{value: cloneBoosts(boosts), expiresAt: c.now().Add(TTLEntitlements)}
 	return nil
 }
 
 // GetBoosts retrieves cached boosts. Returns nil, false on miss.
 func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
-	c.mu.RLock()
+	c.lock.RLock()
 	entry, ok := c.boosts[wsUUID]
-	c.mu.RUnlock()
+	c.lock.RUnlock()
 	if !ok || entry.expired(c.now()) {
 		if ok {
-			c.mu.Lock()
+			c.lock.Lock()
 			delete(c.boosts, wsUUID)
-			c.mu.Unlock()
+			c.lock.Unlock()
 		}
 		return nil, false
 	}
@@ -214,22 +214,22 @@ func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
 
 // SetUsage stores the current usage count for a workspace+feature.
 func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.usage[usageCacheKey(wsUUID, featureCode)] = cacheEntry[int]{value: count, expiresAt: c.now().Add(TTLUsage)}
 	return nil
 }
 
 // GetUsage retrieves a cached usage count. Returns 0, false on miss.
 func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
-	c.mu.RLock()
+	c.lock.RLock()
 	entry, ok := c.usage[usageCacheKey(wsUUID, featureCode)]
-	c.mu.RUnlock()
+	c.lock.RUnlock()
 	if !ok || entry.expired(c.now()) {
 		if ok {
-			c.mu.Lock()
+			c.lock.Lock()
 			delete(c.usage, usageCacheKey(wsUUID, featureCode))
-			c.mu.Unlock()
+			c.lock.Unlock()
 		}
 		return 0, false
 	}
@@ -238,15 +238,15 @@ func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
 
 // invalidateUsage drops the cached usage counter for a workspace+feature pair.
 func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	delete(c.usage, usageCacheKey(wsUUID, featureCode))
 }
 
 // InvalidateWorkspace drops all cache entries for this workspace UUID.
 func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
 	delete(c.workspacesByUUID, wsUUID)
 	delete(c.packages, wsUUID)
@@ -275,22 +275,22 @@ func (c *TenantCache) SetFeature(feature *Feature) error {
 	if feature == nil {
 		return ErrFeatureNotFound
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.features[feature.Code] = cacheEntry[*Feature]{value: cloneFeature(feature), expiresAt: c.now().Add(TTLEntitlements)}
 	return nil
 }
 
 // GetFeature retrieves a cached feature definition by code.
 func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
-	c.mu.RLock()
+	c.lock.RLock()
 	entry, ok := c.features[code]
-	c.mu.RUnlock()
+	c.lock.RUnlock()
 	if !ok || entry.expired(c.now()) {
 		if ok {
-			c.mu.Lock()
+			c.lock.Lock()
 			delete(c.features, code)
-			c.mu.Unlock()
+			c.lock.Unlock()
 		}
 		return nil, false
 	}
@@ -307,8 +307,8 @@ func (c *TenantCache) SetUser(user *User) error {
 	if user.UUID == "" {
 		return ErrNoUserContext
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.users[user.UUID] = cacheEntry[*User]{value: cloneUser(user), expiresAt: c.now().Add(TTLUser)}
 	return nil
 }
@@ -317,14 +317,14 @@ func (c *TenantCache) SetUser(user *User) error {
 //
 //	user, ok := cache.GetUser("550e8400-e29b-41d4-a716-446655440000")
 func (c *TenantCache) GetUser(uuid string) (*User, bool) {
-	c.mu.RLock()
+	c.lock.RLock()
 	entry, ok := c.users[uuid]
-	c.mu.RUnlock()
+	c.lock.RUnlock()
 	if !ok || entry.expired(c.now()) {
 		if ok {
-			c.mu.Lock()
+			c.lock.Lock()
 			delete(c.users, uuid)
-			c.mu.Unlock()
+			c.lock.Unlock()
 		}
 		return nil, false
 	}

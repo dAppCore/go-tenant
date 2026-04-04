@@ -31,13 +31,13 @@ type Tenant struct {
 	cache         *TenantCache
 	entitlements  EntitlementService
 	alertHandlers []AlertHandler
-	mu            sync.Mutex
-	alertState    map[string]alertProgress
+	lock          sync.Mutex
+	alertState    map[string]usageAlertProgress
 }
 
-type alertProgress struct {
-	lastUsed         int
-	highestThreshold int
+type usageAlertProgress struct {
+	lastUsedCount         int
+	highestTriggeredLevel int
 }
 
 // TenantOptions configures the tenant service via Core config.
@@ -269,7 +269,7 @@ func (t *Tenant) InvalidateWorkspace(wsUUID string) {
 	if t.cache != nil {
 		_ = t.cache.InvalidateWorkspace(wsUUID)
 	}
-	t.mu.Lock()
+	t.lock.Lock()
 	if len(t.alertState) > 0 {
 		for key := range t.alertState {
 			if hasAlertPrefix(key, wsUUID) {
@@ -277,7 +277,7 @@ func (t *Tenant) InvalidateWorkspace(wsUUID string) {
 			}
 		}
 	}
-	t.mu.Unlock()
+	t.lock.Unlock()
 }
 
 // OnUsageAlert registers a handler invoked when a usage threshold is crossed.
@@ -288,9 +288,9 @@ func (t *Tenant) OnUsageAlert(h AlertHandler) {
 	if t == nil || h == nil {
 		return
 	}
-	t.mu.Lock()
+	t.lock.Lock()
 	t.alertHandlers = append(t.alertHandlers, h)
-	t.mu.Unlock()
+	t.lock.Unlock()
 }
 
 // Scope returns a configured WorkspaceScope for middleware wiring.
@@ -319,14 +319,14 @@ func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result Enti
 	key := alertStateKey(ws.UUID, featureCode)
 	now := time.Now()
 
-	t.mu.Lock()
+	t.lock.Lock()
 	state := t.alertState[key]
-	if used < state.lastUsed {
-		state.highestThreshold = 0
+	if used < state.lastUsedCount {
+		state.highestTriggeredLevel = 0
 	}
 	alerts := make([]UsageAlert, 0, 3)
 	for _, threshold := range []int{AlertThresholdWarning, AlertThresholdCritical, AlertThresholdLimit} {
-		if percentage >= float64(threshold) && threshold > state.highestThreshold {
+		if percentage >= float64(threshold) && threshold > state.highestTriggeredLevel {
 			alerts = append(alerts, UsageAlert{
 				WorkspaceUUID: ws.UUID,
 				FeatureCode:   featureCode,
@@ -336,16 +336,16 @@ func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result Enti
 				Percentage:    percentage,
 				TriggeredAt:   now,
 			})
-			state.highestThreshold = threshold
+			state.highestTriggeredLevel = threshold
 		}
 	}
-	state.lastUsed = used
+	state.lastUsedCount = used
 	if t.alertState == nil {
-		t.alertState = map[string]alertProgress{}
+		t.alertState = map[string]usageAlertProgress{}
 	}
 	t.alertState[key] = state
 	handlers := append([]AlertHandler(nil), t.alertHandlers...)
-	t.mu.Unlock()
+	t.lock.Unlock()
 
 	for _, alert := range alerts {
 		for _, handler := range handlers {
