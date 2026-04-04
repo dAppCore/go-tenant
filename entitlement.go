@@ -147,7 +147,7 @@ type localEntitlementService struct {
 	client *TenantClient
 }
 
-type packageLimitSnapshot struct {
+type featureLimitSnapshot struct {
 	Limit                int
 	HasFeatureAssignment bool
 	Unlimited            bool
@@ -175,7 +175,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 		return AllowUnlimited(featureCode)
 	}
 
-	hasEnableBoost := false
+	hasBooleanEnableBoost := false
 	for _, boost := range boosts {
 		boostCode := normalizedFeatureCode(boost.FeatureCode)
 		if boostCode != poolCode && boostCode != normalizedFeatureCode(feature.Code) {
@@ -188,7 +188,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 		case BoostTypeUnlimited:
 			return AllowUnlimited(featureCode)
 		case BoostTypeEnable:
-			hasEnableBoost = true
+			hasBooleanEnableBoost = true
 		default:
 			if !packageLimit.HasFeatureAssignment {
 				continue
@@ -208,7 +208,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	}
 
 	if feature.IsBoolean() {
-		if packageLimit.HasFeatureAssignment || hasEnableBoost {
+		if packageLimit.HasFeatureAssignment || hasBooleanEnableBoost {
 			return Allow(featureCode, nil, nil)
 		}
 		return Deny(featureCode, "feature not in any package", nil, nil)
@@ -394,10 +394,10 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 
 	packageLimit := packageLimitForFeature(packages, poolCode)
 	if packageLimit.Unlimited {
-		return nil, true, s.loadUsedCount(ctx, wsUUID, poolCode)
+		return nil, true, s.loadUsageCount(ctx, wsUUID, poolCode)
 	}
 
-	hasEnableBoost := false
+	hasBooleanEnableBoost := false
 	for _, boost := range boosts {
 		boostCode := normalizedFeatureCode(boost.FeatureCode)
 		if boostCode != poolCode && boostCode != normalizedFeatureCode(feature.Code) {
@@ -408,9 +408,9 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		}
 		switch boost.BoostType {
 		case BoostTypeUnlimited:
-			return nil, true, s.loadUsedCount(ctx, wsUUID, poolCode)
+			return nil, true, s.loadUsageCount(ctx, wsUUID, poolCode)
 		case BoostTypeEnable:
-			hasEnableBoost = true
+			hasBooleanEnableBoost = true
 		case BoostTypeAddLimit:
 			if !packageLimit.HasFeatureAssignment {
 				continue
@@ -424,31 +424,31 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 
 	if feature.IsUnlimited() {
 		if packageLimit.HasFeatureAssignment {
-			return nil, true, s.loadUsedCount(ctx, wsUUID, poolCode)
+			return nil, true, s.loadUsageCount(ctx, wsUUID, poolCode)
 		}
-		return nil, false, s.loadUsedCount(ctx, wsUUID, poolCode)
+		return nil, false, s.loadUsageCount(ctx, wsUUID, poolCode)
 	}
 	if feature.IsBoolean() {
-		if packageLimit.HasFeatureAssignment || hasEnableBoost {
+		if packageLimit.HasFeatureAssignment || hasBooleanEnableBoost {
 			return nil, false, nil
 		}
 		return nil, false, nil
 	}
 	if !packageLimit.HasFeatureAssignment {
-		return nil, false, s.loadUsedCount(ctx, wsUUID, poolCode)
+		return nil, false, s.loadUsageCount(ctx, wsUUID, poolCode)
 	}
 	used, _ := s.loadUsage(ctx, wsUUID, poolCode)
 	return &packageLimit.Limit, false, &used
 }
 
-func (s *localEntitlementService) loadUsedCount(ctx context.Context, wsUUID, featureCode string) *int {
+func (s *localEntitlementService) loadUsageCount(ctx context.Context, wsUUID, featureCode string) *int {
 	used, _ := s.loadUsage(ctx, wsUUID, featureCode)
 	return &used
 }
 
-func packageLimitForFeature(packages []Package, featureCode string) packageLimitSnapshot {
+func packageLimitForFeature(packages []Package, featureCode string) featureLimitSnapshot {
 	featureCode = normalizedFeatureCode(featureCode)
-	snapshot := packageLimitSnapshot{}
+	snapshot := featureLimitSnapshot{}
 	highestNonStackableLimit := 0
 	hasNonStackableLimit := false
 

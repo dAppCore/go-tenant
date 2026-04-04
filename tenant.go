@@ -6,8 +6,8 @@
 // The Go layer is a consumer — PHP owns the database. Go calls PHP's REST API
 // for all mutations and queries, then caches the results locally via go-store.
 //
-//	ten, _ := core.ServiceFor[*tenant.Tenant](c, "tenant")
-//	result := ten.Can(ctx, ws, "pages", 1)
+//	tenantService, _ := core.ServiceFor[*tenant.Tenant](c, "tenant")
+//	result := tenantService.Can(ctx, workspace, "pages", 1)
 //	if result.IsDenied() { return core.E("pages", result.Reason, nil) }
 package tenant
 
@@ -32,10 +32,10 @@ type Tenant struct {
 	entitlements  EntitlementService
 	alertHandlers []AlertHandler
 	lock          sync.Mutex
-	alertState    map[string]usageAlertProgress
+	alertState    map[string]usageAlertTracker
 }
 
-type usageAlertProgress struct {
+type usageAlertTracker struct {
 	lastUsedCount         int
 	highestTriggeredLevel int
 }
@@ -73,15 +73,15 @@ func tenantOptionsFromCoreConfig(c *core.Core) TenantOptions {
 	if c == nil || c.Config() == nil {
 		return options
 	}
-	options.APIURL = coreConfigString(c, "api_url", "tenant.api_url")
-	options.APIToken = coreConfigString(c, "api_token", "tenant.api_token")
-	if timeout := coreConfigDuration(c, "timeout", "tenant.timeout"); timeout > 0 {
+	options.APIURL = coreConfigStringValue(c, "api_url", "tenant.api_url")
+	options.APIToken = coreConfigStringValue(c, "api_token", "tenant.api_token")
+	if timeout := coreConfigDurationValue(c, "timeout", "tenant.timeout"); timeout > 0 {
 		options.Timeout = timeout
 	}
 	return options
 }
 
-func coreConfigString(c *core.Core, keys ...string) string {
+func coreConfigStringValue(c *core.Core, keys ...string) string {
 	if c == nil || c.Config() == nil {
 		return ""
 	}
@@ -93,7 +93,7 @@ func coreConfigString(c *core.Core, keys ...string) string {
 	return ""
 }
 
-func coreConfigDuration(c *core.Core, keys ...string) time.Duration {
+func coreConfigDurationValue(c *core.Core, keys ...string) time.Duration {
 	if c == nil || c.Config() == nil {
 		return 0
 	}
@@ -215,7 +215,7 @@ func (t *Tenant) GetUser(ctx context.Context) (*User, error) {
 
 // GetWorkspaceBySubdomain resolves the workspace for an incoming hostname.
 //
-//	ws, err := ten.GetWorkspaceBySubdomain(ctx, r.Host)
+//	workspace, err := tenantService.GetWorkspaceBySubdomain(ctx, "acme.host.uk.com")
 func (t *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
 	if t == nil {
 		return nil, ErrWorkspaceNotFound
@@ -244,7 +244,7 @@ func (t *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Wor
 
 // Can checks whether ws can consume quantity units of featureCode.
 //
-//	result := ten.Can(ctx, ws, "pages", 1)
+//	result := tenantService.Can(ctx, workspace, "pages", 1)
 func (t *Tenant) Can(ctx context.Context, ws *Workspace, featureCode string, quantity int) EntitlementResult {
 	if t == nil {
 		return Deny(featureCode, "tenant not configured", nil, nil)
@@ -257,7 +257,7 @@ func (t *Tenant) Can(ctx context.Context, ws *Workspace, featureCode string, qua
 
 // RecordUsage records feature consumption for ws after a successful operation.
 //
-//	ten.RecordUsage(ctx, ws, "pages", 1, &userID, nil)
+//	tenantService.RecordUsage(ctx, workspace, "pages", 1, &userID, nil)
 func (t *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
 	if t == nil {
 		return ErrNoWorkspaceContext
@@ -275,7 +275,7 @@ func (t *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode str
 
 // GetUsageSummary returns all features with their current usage for ws.
 //
-//	items, err := ten.GetUsageSummary(ctx, ws)
+//	items, err := tenantService.GetUsageSummary(ctx, workspace)
 func (t *Tenant) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error) {
 	if t == nil {
 		return nil, ErrNoWorkspaceContext
@@ -288,7 +288,7 @@ func (t *Tenant) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSum
 
 // InvalidateWorkspace drops the local cache for ws.
 //
-//	ten.InvalidateWorkspace(ws.UUID)
+//	tenantService.InvalidateWorkspace("workspace-uuid")
 func (t *Tenant) InvalidateWorkspace(wsUUID string) {
 	if t == nil {
 		return
@@ -313,7 +313,7 @@ func (t *Tenant) InvalidateWorkspace(wsUUID string) {
 // OnUsageAlert registers a handler invoked when a usage threshold is crossed.
 // Multiple handlers can be registered; all fire in registration order.
 //
-//	ten.OnUsageAlert(func(a tenant.UsageAlert) { notify(a.WorkspaceUUID, a.Threshold) })
+//	tenantService.OnUsageAlert(func(alert tenant.UsageAlert) { notify(alert.WorkspaceUUID, alert.Threshold) })
 func (t *Tenant) OnUsageAlert(h AlertHandler) {
 	if t == nil || h == nil {
 		return
@@ -325,7 +325,7 @@ func (t *Tenant) OnUsageAlert(h AlertHandler) {
 
 // Scope returns a configured WorkspaceScope for middleware wiring.
 //
-//	router.Use(ten.Scope().Middleware())
+//	router.Use(tenantService.Scope().Middleware())
 func (t *Tenant) Scope() *WorkspaceScope {
 	return NewWorkspaceScope(t)
 }
@@ -334,7 +334,7 @@ func (t *Tenant) Scope() *WorkspaceScope {
 // registered AlertHandlers if a threshold is newly crossed.
 // Called internally by Tenant.RecordUsage — not usually called directly.
 //
-//	ten.CheckUsageAlerts(ws, "pages", result)
+//	tenantService.CheckUsageAlerts(workspace, "pages", result)
 func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result EntitlementResult) {
 	if t == nil || ws == nil || result.Limit == nil || result.Used == nil {
 		return
@@ -371,7 +371,7 @@ func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result Enti
 	}
 	state.lastUsedCount = used
 	if t.alertState == nil {
-		t.alertState = map[string]usageAlertProgress{}
+		t.alertState = map[string]usageAlertTracker{}
 	}
 	t.alertState[key] = state
 	handlers := append([]AlertHandler(nil), t.alertHandlers...)

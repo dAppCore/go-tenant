@@ -234,8 +234,9 @@ func (c *TenantClient) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Wo
 }
 
 // GetWorkspaceBySubdomain resolves a hostname to a workspace.
+// It checks the slug first, then falls back to the domain-prefix endpoint.
 //
-//	workspace, err := client.GetWorkspaceBySubdomain(ctx, "acme.host.uk.com")
+//	workspace, err := tenantClient.GetWorkspaceBySubdomain(ctx, "acme.host.uk.com")
 func (c *TenantClient) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
 	if slug := workspaceSlugFromHost(host); slug != "" {
 		if workspace, err := c.GetWorkspaceBySlug(ctx, slug); err == nil {
@@ -330,7 +331,7 @@ func (c *TenantClient) RecordUsage(ctx context.Context, wsUUID, featureCode stri
 
 // GetFeature fetches a single feature definition by code.
 //
-//	feature, err := client.GetFeature(ctx, "pages")
+//	feature, err := tenantClient.GetFeature(ctx, "pages")
 func (c *TenantClient) GetFeature(ctx context.Context, code string) (*Feature, error) {
 	code = normalizedFeatureCode(code)
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/features/"+url.PathEscape(code), nil)

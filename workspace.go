@@ -30,10 +30,10 @@ type Workspace struct {
 
 // WorkspaceContext is a request-scoped holder for workspace and user values.
 //
-//	ctx := tenant.WorkspaceContext{Context: r.Context()}.
-//		WithWorkspace(ws).
-//		WithUser(user)
-//	ws, _ := ctx.Workspace()
+//	contextHolder := tenant.WorkspaceContext{Context: r.Context()}.
+//		WithWorkspace(workspace).
+//		WithUser(authenticatedUser)
+//	ws, _ := contextHolder.Workspace()
 type WorkspaceContext struct {
 	Context context.Context
 }
@@ -47,7 +47,7 @@ func (c WorkspaceContext) baseContext() context.Context {
 
 // WithWorkspace returns a new holder carrying the workspace.
 //
-//	ctx := tenant.WorkspaceContext{}.WithWorkspace(ws)
+//	contextHolder := tenant.WorkspaceContext{}.WithWorkspace(workspace)
 func (c WorkspaceContext) WithWorkspace(ws *Workspace) WorkspaceContext {
 	c.Context = WithWorkspace(c.baseContext(), ws)
 	return c
@@ -55,7 +55,7 @@ func (c WorkspaceContext) WithWorkspace(ws *Workspace) WorkspaceContext {
 
 // WithUser returns a new holder carrying the user.
 //
-//	ctx := tenant.WorkspaceContext{}.WithUser(user)
+//	contextHolder := tenant.WorkspaceContext{}.WithUser(authenticatedUser)
 func (c WorkspaceContext) WithUser(user *User) WorkspaceContext {
 	c.Context = WithUser(c.baseContext(), user)
 	return c
