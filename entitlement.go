@@ -164,7 +164,6 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	boosts, _ := s.loadBoosts(ctx, ws.UUID)
 	used, _ := s.loadUsage(ctx, ws.UUID, poolCode)
 
-	unlimited := feature.IsUnlimited()
 	limit := 0
 	hasPackageLimit := false
 
@@ -178,8 +177,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 		}
 		hasPackageLimit = true
 		if *limitValue == -1 {
-			unlimited = true
-			break
+			return AllowUnlimited(featureCode)
 		}
 		limit += *limitValue
 	}
@@ -193,24 +191,23 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 		}
 		switch boost.BoostType {
 		case BoostTypeUnlimited:
-			unlimited = true
+			return AllowUnlimited(featureCode)
 		default:
 			if !hasPackageLimit {
 				continue
 			}
 			remaining := boost.Remaining()
-			if remaining == -1 {
-				unlimited = true
-				continue
-			}
 			if remaining > 0 {
 				limit += remaining
 			}
 		}
 	}
 
-	if unlimited {
-		return AllowUnlimited(featureCode)
+	if feature.IsUnlimited() {
+		if hasPackageLimit {
+			return AllowUnlimited(featureCode)
+		}
+		return Deny(featureCode, "feature not in any package", nil, nil)
 	}
 
 	if feature.IsBoolean() {
@@ -395,7 +392,6 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 	packages, _ := s.loadPackages(ctx, wsUUID)
 	boosts, _ := s.loadBoosts(ctx, wsUUID)
 
-	unlimited := feature.IsUnlimited()
 	limit := 0
 	hasPackageLimit := false
 
@@ -409,8 +405,7 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		}
 		hasPackageLimit = true
 		if *limitValue == -1 {
-			unlimited = true
-			break
+			return nil, true, s.loadUsedCount(ctx, wsUUID, poolCode)
 		}
 		limit += *limitValue
 	}
@@ -424,7 +419,7 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		}
 		switch boost.BoostType {
 		case BoostTypeUnlimited:
-			unlimited = true
+			return nil, true, s.loadUsedCount(ctx, wsUUID, poolCode)
 		case BoostTypeAddLimit:
 			if !hasPackageLimit {
 				continue
@@ -436,14 +431,20 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		}
 	}
 
-	if unlimited {
-		used, _ := s.loadUsage(ctx, wsUUID, poolCode)
-		return nil, true, &used
+	if feature.IsUnlimited() {
+		if hasPackageLimit {
+			return nil, true, s.loadUsedCount(ctx, wsUUID, poolCode)
+		}
+		return nil, false, s.loadUsedCount(ctx, wsUUID, poolCode)
 	}
 	if !hasPackageLimit {
-		used, _ := s.loadUsage(ctx, wsUUID, poolCode)
-		return nil, false, &used
+		return nil, false, s.loadUsedCount(ctx, wsUUID, poolCode)
 	}
 	used, _ := s.loadUsage(ctx, wsUUID, poolCode)
 	return &limit, false, &used
+}
+
+func (s *localEntitlementService) loadUsedCount(ctx context.Context, wsUUID, featureCode string) *int {
+	used, _ := s.loadUsage(ctx, wsUUID, featureCode)
+	return &used
 }

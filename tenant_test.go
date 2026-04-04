@@ -142,6 +142,33 @@ func TestTenantCache_SetGet_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenantCache_SetWorkspaceRefresh_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{ID: 7, UUID: "uuid-7", Slug: "acme"}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+
+	workspace.Slug = "beta"
+	workspace.ID = 8
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("refresh workspace: %v", err)
+	}
+
+	if got, ok := cache.GetWorkspaceBySlug("acme"); ok || got != nil {
+		t.Fatal("expected old slug mapping to be removed")
+	}
+	if got, ok := cache.GetWorkspaceBySlug("beta"); !ok || got == nil || got.Slug != "beta" {
+		t.Fatalf("expected refreshed slug mapping, got %+v", got)
+	}
+	if got, ok := cache.GetWorkspaceByID(7); ok || got != nil {
+		t.Fatal("expected old id mapping to be removed")
+	}
+	if got, ok := cache.GetWorkspaceByID(8); !ok || got == nil || got.Slug != "beta" {
+		t.Fatalf("expected refreshed id mapping, got %+v", got)
+	}
+}
+
 func TestTenantCache_SetUser_Good(t *testing.T) {
 	cache := NewTenantCache(nil)
 	user := &User{UUID: "user-7", Name: "Ada", Email: "ada@example.uk"}
@@ -261,6 +288,54 @@ func TestTenant_Can_UnlimitedBoost_Good(t *testing.T) {
 	result := tenant.Can(context.Background(), workspace, "pages", 1)
 	if !result.IsAllowed() || !result.Unlimited {
 		t.Fatalf("expected unlimited allowance from boost, got %+v", result)
+	}
+}
+
+func TestTenant_Can_UnlimitedFeature_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeUnlimited}
+	packages := []Package{{Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(10)}}}}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetPackages(workspace.UUID, packages); err != nil {
+		t.Fatalf("set packages: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	result := tenant.Can(context.Background(), workspace, "pages", 1)
+	if !result.IsAllowed() || !result.Unlimited {
+		t.Fatalf("expected unlimited allowance from feature type, got %+v", result)
+	}
+}
+
+func TestTenant_Can_UnlimitedFeature_Bad(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeUnlimited}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	result := tenant.Can(context.Background(), workspace, "pages", 1)
+	if result.IsAllowed() {
+		t.Fatalf("expected denial without package membership, got %+v", result)
+	}
+}
+
+func TestTenant_Can_UnlimitedFeature_Ugly(t *testing.T) {
+	tenant := &Tenant{cache: NewTenantCache(nil)}
+	result := tenant.Can(context.Background(), &Workspace{UUID: "uuid-7"}, "pages", 1)
+	if result.IsAllowed() {
+		t.Fatalf("expected denial on feature cache miss, got %+v", result)
 	}
 }
 

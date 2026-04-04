@@ -104,6 +104,17 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	for id, uuid := range c.workspaceIDs {
+		if uuid == ws.UUID {
+			delete(c.workspaceIDs, id)
+		}
+	}
+	for slug, uuid := range c.workspaceSlugs {
+		if uuid == ws.UUID {
+			delete(c.workspaceSlugs, slug)
+		}
+	}
+
 	clone := cloneWorkspace(ws)
 	c.workspacesByUUID[ws.UUID] = cacheEntry[*Workspace]{value: clone, expiresAt: c.now().Add(TTLWorkspace)}
 	if ws.ID != 0 {
