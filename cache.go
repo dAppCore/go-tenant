@@ -158,6 +158,9 @@ func cloneUser(user *User) *User {
 //
 //	cache.SetWorkspace(&tenant.Workspace{ID: 7, UUID: "uuid-7", Slug: "acme"})
 func (c *TenantCache) SetWorkspace(ws *Workspace) error {
+	if c == nil {
+		return ErrNoWorkspaceContext
+	}
 	if ws == nil {
 		return ErrNoWorkspaceContext
 	}
@@ -201,6 +204,9 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 //
 //	workspace, ok := cache.GetWorkspace("uuid-7")
 func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
+	if c == nil {
+		return nil, false
+	}
 	c.lock.RLock()
 	entry, ok := c.workspacesByUUID[uuid]
 	c.lock.RUnlock()
@@ -225,6 +231,9 @@ func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
 //
 //	workspace, ok := cache.GetWorkspaceByID(7)
 func (c *TenantCache) GetWorkspaceByID(id int64) (*Workspace, bool) {
+	if c == nil {
+		return nil, false
+	}
 	c.lock.RLock()
 	uuid, ok := c.workspaceIDs[id]
 	c.lock.RUnlock()
@@ -241,6 +250,9 @@ func (c *TenantCache) GetWorkspaceByID(id int64) (*Workspace, bool) {
 //
 //	workspace, ok := cache.GetWorkspaceBySlug("acme")
 func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
+	if c == nil {
+		return nil, false
+	}
 	c.lock.RLock()
 	uuid, ok := c.workspaceSlugs[slug]
 	c.lock.RUnlock()
@@ -257,6 +269,9 @@ func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
 //
 //	cache.SetPackages(ws.UUID, []tenant.Package{{Code: "starter"}})
 func (c *TenantCache) SetPackages(wsUUID string, packages []Package) error {
+	if c == nil {
+		return ErrNoWorkspaceContext
+	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.packages[wsUUID] = cacheEntry{value: clonePackages(packages), expiresAt: c.now().Add(TTLEntitlements)}
@@ -270,6 +285,9 @@ func (c *TenantCache) SetPackages(wsUUID string, packages []Package) error {
 //
 //	packages, ok := cache.GetPackages(ws.UUID)
 func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
+	if c == nil {
+		return nil, false
+	}
 	c.lock.RLock()
 	entry, ok := c.packages[wsUUID]
 	c.lock.RUnlock()
@@ -296,6 +314,9 @@ func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
 //
 //	cache.SetBoosts(ws.UUID, []tenant.Boost{{FeatureCode: "pages"}})
 func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) error {
+	if c == nil {
+		return ErrNoWorkspaceContext
+	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.boosts[wsUUID] = cacheEntry{value: cloneBoosts(boosts), expiresAt: c.now().Add(TTLEntitlements)}
@@ -309,6 +330,9 @@ func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) error {
 //
 //	boosts, ok := cache.GetBoosts(ws.UUID)
 func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
+	if c == nil {
+		return nil, false
+	}
 	c.lock.RLock()
 	entry, ok := c.boosts[wsUUID]
 	c.lock.RUnlock()
@@ -335,6 +359,9 @@ func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
 //
 //	cache.SetUsage(ws.UUID, "pages", 7)
 func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
+	if c == nil {
+		return ErrNoWorkspaceContext
+	}
 	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -349,6 +376,9 @@ func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
 //
 //	used, ok := cache.GetUsage(ws.UUID, "pages")
 func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
+	if c == nil {
+		return 0, false
+	}
 	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.RLock()
 	entry, ok := c.usage[usageCacheKey(wsUUID, featureCode)]
@@ -388,6 +418,9 @@ func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) {
 //
 //	cache.InvalidateWorkspace(ws.UUID)
 func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
+	if c == nil {
+		return nil
+	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -423,6 +456,9 @@ func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
 //
 //	cache.SetFeature(&tenant.Feature{Code: "pages", Type: tenant.FeatureTypeLimit})
 func (c *TenantCache) SetFeature(feature *Feature) error {
+	if c == nil {
+		return ErrFeatureNotFound
+	}
 	if feature == nil {
 		return ErrFeatureNotFound
 	}
@@ -440,6 +476,9 @@ func (c *TenantCache) SetFeature(feature *Feature) error {
 //
 //	feature, ok := cache.GetFeature("pages")
 func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
+	if c == nil {
+		return nil, false
+	}
 	code = normalizedFeatureCode(code)
 	c.lock.RLock()
 	entry, ok := c.features[code]
@@ -467,6 +506,9 @@ func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
 //
 //	cache.SetUser(&tenant.User{UUID: "user-7", Email: "ada@example.uk"})
 func (c *TenantCache) SetUser(user *User) error {
+	if c == nil {
+		return ErrNoUserContext
+	}
 	if user == nil {
 		return ErrNoUserContext
 	}
@@ -486,6 +528,9 @@ func (c *TenantCache) SetUser(user *User) error {
 //
 //	user, ok := cache.GetUser("user-7")
 func (c *TenantCache) GetUser(uuid string) (*User, bool) {
+	if c == nil {
+		return nil, false
+	}
 	c.lock.RLock()
 	entry, ok := c.users[uuid]
 	c.lock.RUnlock()

@@ -239,6 +239,48 @@ func TestTenantCache_SetUser_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenantCache_NilReceiver_Good(t *testing.T) {
+	var cache *TenantCache
+
+	if got, ok := cache.GetWorkspace("uuid-7"); ok || got != nil {
+		t.Fatalf("expected workspace miss on nil cache, got %+v", got)
+	}
+	if got, ok := cache.GetFeature("pages"); ok || got != nil {
+		t.Fatalf("expected feature miss on nil cache, got %+v", got)
+	}
+	if got, ok := cache.GetUser("user-7"); ok || got != nil {
+		t.Fatalf("expected user miss on nil cache, got %+v", got)
+	}
+}
+
+func TestTenantCache_NilReceiver_Bad(t *testing.T) {
+	var cache *TenantCache
+
+	if err := cache.SetWorkspace(&Workspace{UUID: "uuid-7"}); !errors.Is(err, ErrNoWorkspaceContext) {
+		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
+	}
+	if err := cache.SetFeature(&Feature{Code: "pages"}); !errors.Is(err, ErrFeatureNotFound) {
+		t.Fatalf("expected ErrFeatureNotFound, got %v", err)
+	}
+	if err := cache.SetUser(&User{UUID: "user-7"}); !errors.Is(err, ErrNoUserContext) {
+		t.Fatalf("expected ErrNoUserContext, got %v", err)
+	}
+}
+
+func TestTenantCache_NilReceiver_Ugly(t *testing.T) {
+	var cache *TenantCache
+
+	if err := cache.InvalidateWorkspace("uuid-7"); err != nil {
+		t.Fatalf("expected nil invalidate error, got %v", err)
+	}
+	if got, ok := cache.GetPackages("uuid-7"); ok || got != nil {
+		t.Fatalf("expected packages miss on nil cache, got %+v", got)
+	}
+	if got, ok := cache.GetBoosts("uuid-7"); ok || got != nil {
+		t.Fatalf("expected boosts miss on nil cache, got %+v", got)
+	}
+}
+
 func TestTenant_Can_Good(t *testing.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
