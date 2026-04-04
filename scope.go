@@ -93,6 +93,9 @@ func (s *WorkspaceScope) ScopeFunc(ctx context.Context, slug string, fn func(con
 	}
 	workspace, err := s.tenant.GetWorkspace(ctx, slug)
 	if err != nil {
+		if err == ErrWorkspaceNotFound {
+			return ErrNoWorkspaceContext
+		}
 		return err
 	}
 	if workspace == nil {

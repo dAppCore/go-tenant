@@ -568,6 +568,67 @@ func TestTenant_RecordUsage_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenant_RecordUsage_RemoteInvalidatesUsageOnly_Good(t *testing.T) {
+	var packagesHits int32
+	var boostsHits int32
+	var usageHits int32
+	serverUsage := 3
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/features/pages":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":1,"code":"pages","name":"Pages","type":"limit","reset_type":"none","is_active":true}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme/packages":
+			atomic.AddInt32(&packagesHits, 1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"id":1,"code":"starter","name":"Starter","is_active":true,"features":[{"feature_code":"pages","limit_value":10}]}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme/boosts":
+			atomic.AddInt32(&boostsHits, 1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme/usage/pages":
+			atomic.AddInt32(&usageHits, 1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"count":` + strconv.Itoa(serverUsage) + `}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/workspaces/acme/usage":
+			serverUsage++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	workspace := &Workspace{UUID: "acme", Slug: "acme"}
+	tenant := &Tenant{
+		client: NewTenantClient(server.URL, "token"),
+		cache:  NewTenantCache(nil),
+	}
+
+	initial := tenant.Can(context.Background(), workspace, "pages", 0)
+	if initial.Used == nil || *initial.Used != 3 {
+		t.Fatalf("expected initial usage=3, got %+v", initial.Used)
+	}
+	if err := tenant.RecordUsage(context.Background(), workspace, "pages", 1, nil, nil); err != nil {
+		t.Fatalf("record usage: %v", err)
+	}
+	refreshed := tenant.Can(context.Background(), workspace, "pages", 0)
+	if refreshed.Used == nil || *refreshed.Used != 4 {
+		t.Fatalf("expected refreshed usage=4, got %+v", refreshed.Used)
+	}
+	if atomic.LoadInt32(&packagesHits) != 1 {
+		t.Fatalf("expected packages to stay cached, got %d fetches", packagesHits)
+	}
+	if atomic.LoadInt32(&boostsHits) != 1 {
+		t.Fatalf("expected boosts to stay cached, got %d fetches", boostsHits)
+	}
+	if atomic.LoadInt32(&usageHits) != 2 {
+		t.Fatalf("expected usage to be reloaded exactly once, got %d fetches", usageHits)
+	}
+}
+
 func TestTenant_GetUsageSummary_BooleanEnableBoost_Good(t *testing.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
@@ -819,6 +880,54 @@ func TestWorkspaceScope_Middleware_InvalidID_Bad(t *testing.T) {
 	}
 	if handlerCalled {
 		t.Fatal("expected request to stop before handler")
+	}
+}
+
+func TestWorkspaceScope_ScopeFunc_Good(t *testing.T) {
+	tenant := &Tenant{cache: NewTenantCache(nil)}
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	if err := tenant.cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+
+	scope := NewWorkspaceScope(tenant)
+	err := scope.ScopeFunc(context.Background(), "acme", func(ctx context.Context) error {
+		got, err := WorkspaceFromCtx(ctx)
+		if err != nil {
+			return err
+		}
+		if got.UUID != "uuid-7" {
+			t.Fatalf("unexpected workspace: %+v", got)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scope func: %v", err)
+	}
+}
+
+func TestWorkspaceScope_ScopeFunc_Bad(t *testing.T) {
+	scope := NewWorkspaceScope(&Tenant{cache: NewTenantCache(nil)})
+	if err := scope.ScopeFunc(context.Background(), "missing", func(ctx context.Context) error {
+		return nil
+	}); !errors.Is(err, ErrNoWorkspaceContext) {
+		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
+	}
+}
+
+func TestWorkspaceScope_ScopeFunc_Ugly(t *testing.T) {
+	tenant := &Tenant{cache: NewTenantCache(nil)}
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	if err := tenant.cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+
+	scope := NewWorkspaceScope(tenant)
+	expected := core.E("tenant.scope", "callback failed", nil)
+	if err := scope.ScopeFunc(context.Background(), "acme", func(ctx context.Context) error {
+		return expected
+	}); !errors.Is(err, expected) {
+		t.Fatalf("expected callback error, got %v", err)
 	}
 }
 

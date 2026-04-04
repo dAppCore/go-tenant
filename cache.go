@@ -348,10 +348,14 @@ func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
 }
 
 // invalidateUsage drops the cached usage counter for a workspace+feature pair.
+//
+//	c.invalidateUsage(ws.UUID, "pages")
 func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) {
+	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	delete(c.usage, usageCacheKey(wsUUID, featureCode))
+	c.deleteStoreGroup(usageGroup(wsUUID, featureCode))
 }
 
 // InvalidateWorkspace drops all cache entries for this workspace UUID.

@@ -241,7 +241,7 @@ func (s *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace
 	}
 	if s.cache != nil {
 		if s.client != nil {
-			_ = s.cache.InvalidateWorkspace(ws.UUID)
+			s.cache.invalidateUsage(ws.UUID, poolCode)
 		} else if used, ok := s.cache.GetUsage(ws.UUID, poolCode); ok {
 			_ = s.cache.SetUsage(ws.UUID, poolCode, used+quantity)
 		} else {
