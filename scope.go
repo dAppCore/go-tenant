@@ -29,6 +29,8 @@ type WorkspaceScope struct {
 // NewWorkspaceScope creates a new scope resolver. Strict mode is enabled by default.
 //
 //	scope := tenant.NewWorkspaceScope(ten)
+//
+//	scope := tenant.NewWorkspaceScope(ten)
 func NewWorkspaceScope(t *Tenant) *WorkspaceScope {
 	return &WorkspaceScope{tenant: t, strict: true}
 }
@@ -44,6 +46,8 @@ func (s *WorkspaceScope) WithStrict(strict bool) *WorkspaceScope {
 }
 
 // Middleware returns an http.Handler middleware for use with net/http or Gin.
+//
+//	router.Use(scope.Middleware())
 //
 //	router.Use(scope.Middleware())
 func (s *WorkspaceScope) Middleware() func(http.Handler) http.Handler {
@@ -65,6 +69,8 @@ func (s *WorkspaceScope) Middleware() func(http.Handler) http.Handler {
 
 // RequireWorkspace is a second-stage middleware that aborts 401 if no workspace is
 // in context. For use after Middleware() when strict=false on the outer scope.
+//
+//	authGroup.Use(scope.Middleware(), scope.RequireWorkspace())
 //
 //	authGroup.Use(scope.Middleware(), scope.RequireWorkspace())
 func (s *WorkspaceScope) RequireWorkspace() func(http.Handler) http.Handler {

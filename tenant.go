@@ -52,6 +52,8 @@ type TenantOptions struct {
 // Register is the Core service factory. Called by core.WithService.
 //
 //	core.New(core.WithService(tenant.Register))
+//
+//	core.New(core.WithService(tenant.Register))
 func Register(c *core.Core) core.Result {
 	if c == nil {
 		return core.Result{Value: core.E("tenant", "core is nil", nil), OK: false}

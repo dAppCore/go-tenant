@@ -17,7 +17,9 @@ import (
 )
 
 // TenantClient calls the PHP REST API to read and mutate tenant data.
-// Reads are cached by TenantCache; the client is called on cache miss.
+//
+//	client := tenant.NewTenantClient("https://api.host.uk.com", token)
+//	ws, err := client.GetWorkspaceBySlug(ctx, "acme")
 type TenantClient struct {
 	baseURL    string
 	token      string
@@ -29,6 +31,8 @@ type TenantClient struct {
 type ClientOption func(*TenantClient)
 
 // NewTenantClient creates a new PHP API transport with the given base URL and bearer token.
+//
+//	client := tenant.NewTenantClient(url, token, tenant.WithTimeout(5*time.Second))
 func NewTenantClient(baseURL, token string, opts ...ClientOption) *TenantClient {
 	client := &TenantClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
@@ -43,6 +47,8 @@ func NewTenantClient(baseURL, token string, opts ...ClientOption) *TenantClient 
 }
 
 // WithTimeout overrides the default 10-second request timeout.
+//
+//	client := tenant.NewTenantClient(url, token, tenant.WithTimeout(5*time.Second))
 func WithTimeout(d time.Duration) ClientOption {
 	return func(c *TenantClient) {
 		c.timeout = d
@@ -182,6 +188,8 @@ func decodeCount(data []byte) (int, error) {
 }
 
 // GetWorkspaceBySlug fetches a workspace by its slug.
+//
+//	workspace, err := client.GetWorkspaceBySlug(ctx, "acme")
 func (c *TenantClient) GetWorkspaceBySlug(ctx context.Context, slug string) (*Workspace, error) {
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(slug), nil)
 	if err != nil {
@@ -195,6 +203,8 @@ func (c *TenantClient) GetWorkspaceBySlug(ctx context.Context, slug string) (*Wo
 }
 
 // GetWorkspaceByUUID fetches a workspace by UUID.
+//
+//	workspace, err := client.GetWorkspaceByUUID(ctx, "550e8400-...")
 func (c *TenantClient) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspace, error) {
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/uuid/"+url.PathEscape(uuid), nil)
 	if err != nil {
@@ -208,6 +218,8 @@ func (c *TenantClient) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Wo
 }
 
 // GetWorkspaceBySubdomain resolves a hostname to a workspace.
+//
+//	workspace, err := client.GetWorkspaceBySubdomain(ctx, "acme.host.uk.com")
 func (c *TenantClient) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
 	if slug := workspaceSlugFromHost(host); slug != "" {
 		if workspace, err := c.GetWorkspaceBySlug(ctx, slug); err == nil {
@@ -228,6 +240,8 @@ func (c *TenantClient) GetWorkspaceBySubdomain(ctx context.Context, host string)
 }
 
 // GetUser fetches the authenticated user by the bearer token on the client.
+//
+//	user, err := client.GetUser(ctx)
 func (c *TenantClient) GetUser(ctx context.Context) (*User, error) {
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/user", nil)
 	if err != nil {
@@ -241,6 +255,8 @@ func (c *TenantClient) GetUser(ctx context.Context) (*User, error) {
 }
 
 // GetPackagesForWorkspace returns all active packages assigned to the workspace.
+//
+//	packages, err := client.GetPackagesForWorkspace(ctx, ws.UUID)
 func (c *TenantClient) GetPackagesForWorkspace(ctx context.Context, wsUUID string) ([]Package, error) {
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/packages", nil)
 	if err != nil {
@@ -254,6 +270,8 @@ func (c *TenantClient) GetPackagesForWorkspace(ctx context.Context, wsUUID strin
 }
 
 // GetBoostsForWorkspace returns all active, usable boosts for the workspace.
+//
+//	boosts, err := client.GetBoostsForWorkspace(ctx, ws.UUID)
 func (c *TenantClient) GetBoostsForWorkspace(ctx context.Context, wsUUID string) ([]Boost, error) {
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/boosts", nil)
 	if err != nil {
@@ -267,6 +285,8 @@ func (c *TenantClient) GetBoostsForWorkspace(ctx context.Context, wsUUID string)
 }
 
 // GetCurrentUsage returns total usage count for wsUUID+featureCode since reset boundary.
+//
+//	used, err := client.GetCurrentUsage(ctx, ws.UUID, "pages")
 func (c *TenantClient) GetCurrentUsage(ctx context.Context, wsUUID, featureCode string) (int, error) {
 	featureCode = normalizedFeatureCode(featureCode)
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/usage/"+url.PathEscape(featureCode), nil)
@@ -277,6 +297,8 @@ func (c *TenantClient) GetCurrentUsage(ctx context.Context, wsUUID, featureCode 
 }
 
 // RecordUsage POSTs a usage record to the PHP API.
+//
+//	err := client.RecordUsage(ctx, ws.UUID, "pages", 1, &userID, nil)
 func (c *TenantClient) RecordUsage(ctx context.Context, wsUUID, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
 	payload := map[string]any{
 		"feature_code": featureCode,
@@ -291,6 +313,8 @@ func (c *TenantClient) RecordUsage(ctx context.Context, wsUUID, featureCode stri
 }
 
 // GetFeature fetches a single feature definition by code.
+//
+//	feature, err := client.GetFeature(ctx, "pages")
 func (c *TenantClient) GetFeature(ctx context.Context, code string) (*Feature, error) {
 	code = normalizedFeatureCode(code)
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/features/"+url.PathEscape(code), nil)

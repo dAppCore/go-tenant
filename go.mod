@@ -5,6 +5,11 @@ go 1.26.0
 require dappco.re/go/core v0.8.0-alpha.1
 
 require (
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/ncruces/go-strftime v1.0.0 // indirect
+)
+
+require (
 	dappco.re/go/core/store v0.2.1
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect

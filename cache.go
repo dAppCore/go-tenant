@@ -47,8 +47,8 @@ type TenantCache struct {
 
 // NewTenantCache creates a new cache backed by the given store handle.
 //
-//	cache, _ := store.New(":memory:")
-//	tenantCache := tenant.NewTenantCache(cache)
+//	st, _ := store.New(":memory:")
+//	tenantCache := tenant.NewTenantCache(st)
 func NewTenantCache(st *store.Store) *TenantCache {
 	return &TenantCache{
 		store:            st,
@@ -152,6 +152,8 @@ func cloneUser(user *User) *User {
 }
 
 // SetWorkspace stores the workspace record.
+//
+//	cache.SetWorkspace(&tenant.Workspace{ID: 7, UUID: "uuid-7", Slug: "acme"})
 func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 	if ws == nil {
 		return ErrNoWorkspaceContext
@@ -193,6 +195,8 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 }
 
 // GetWorkspace retrieves a cached workspace by UUID. Returns nil, false on miss.
+//
+//	workspace, ok := cache.GetWorkspace("uuid-7")
 func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
 	c.lock.RLock()
 	entry, ok := c.workspacesByUUID[uuid]
@@ -214,6 +218,8 @@ func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
 }
 
 // GetWorkspaceByID retrieves a cached workspace by integer ID.
+//
+//	workspace, ok := cache.GetWorkspaceByID(7)
 func (c *TenantCache) GetWorkspaceByID(id int64) (*Workspace, bool) {
 	c.lock.RLock()
 	uuid, ok := c.workspaceIDs[id]
@@ -228,6 +234,8 @@ func (c *TenantCache) GetWorkspaceByID(id int64) (*Workspace, bool) {
 }
 
 // GetWorkspaceBySlug retrieves a cached workspace by slug via UUID indirection.
+//
+//	workspace, ok := cache.GetWorkspaceBySlug("acme")
 func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
 	c.lock.RLock()
 	uuid, ok := c.workspaceSlugs[slug]
@@ -242,6 +250,8 @@ func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
 }
 
 // SetPackages stores the active package list for a workspace.
+//
+//	cache.SetPackages(ws.UUID, []tenant.Package{{Code: "starter"}})
 func (c *TenantCache) SetPackages(wsUUID string, packages []Package) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -253,6 +263,8 @@ func (c *TenantCache) SetPackages(wsUUID string, packages []Package) error {
 }
 
 // GetPackages retrieves cached packages. Returns nil, false on miss.
+//
+//	packages, ok := cache.GetPackages(ws.UUID)
 func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
 	c.lock.RLock()
 	entry, ok := c.packages[wsUUID]
@@ -276,6 +288,8 @@ func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
 }
 
 // SetBoosts stores the active boost list for a workspace.
+//
+//	cache.SetBoosts(ws.UUID, []tenant.Boost{{FeatureCode: "pages"}})
 func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -287,6 +301,8 @@ func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) error {
 }
 
 // GetBoosts retrieves cached boosts. Returns nil, false on miss.
+//
+//	boosts, ok := cache.GetBoosts(ws.UUID)
 func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
 	c.lock.RLock()
 	entry, ok := c.boosts[wsUUID]
@@ -310,6 +326,8 @@ func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
 }
 
 // SetUsage stores the current usage count for a workspace+feature.
+//
+//	cache.SetUsage(ws.UUID, "pages", 7)
 func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
 	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.Lock()
@@ -322,6 +340,8 @@ func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
 }
 
 // GetUsage retrieves a cached usage count. Returns 0, false on miss.
+//
+//	used, ok := cache.GetUsage(ws.UUID, "pages")
 func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
 	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.RLock()
@@ -358,6 +378,8 @@ func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) {
 }
 
 // InvalidateWorkspace drops all cache entries for this workspace UUID.
+//
+//	cache.InvalidateWorkspace(ws.UUID)
 func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -391,6 +413,8 @@ func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
 }
 
 // SetFeature stores a feature definition by code. Features are global.
+//
+//	cache.SetFeature(&tenant.Feature{Code: "pages", Type: tenant.FeatureTypeLimit})
 func (c *TenantCache) SetFeature(feature *Feature) error {
 	if feature == nil {
 		return ErrFeatureNotFound
@@ -406,6 +430,8 @@ func (c *TenantCache) SetFeature(feature *Feature) error {
 }
 
 // GetFeature retrieves a cached feature definition by code.
+//
+//	feature, ok := cache.GetFeature("pages")
 func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
 	code = normalizedFeatureCode(code)
 	c.lock.RLock()
@@ -431,7 +457,7 @@ func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
 
 // SetUser stores the authenticated user record.
 //
-//	cache.SetUser(user)
+//	cache.SetUser(&tenant.User{UUID: "user-7", Email: "ada@example.uk"})
 func (c *TenantCache) SetUser(user *User) error {
 	if user == nil {
 		return ErrNoUserContext
@@ -450,7 +476,7 @@ func (c *TenantCache) SetUser(user *User) error {
 
 // GetUser retrieves a cached user by UUID. Returns nil, false on miss.
 //
-//	user, ok := cache.GetUser("550e8400-e29b-41d4-a716-446655440000")
+//	user, ok := cache.GetUser("user-7")
 func (c *TenantCache) GetUser(uuid string) (*User, bool) {
 	c.lock.RLock()
 	entry, ok := c.users[uuid]
