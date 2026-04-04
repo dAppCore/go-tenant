@@ -25,6 +25,8 @@ type User struct {
 }
 
 // UserTier maps to PHP's UserTier enum.
+//
+//	user := tenant.User{Tier: tenant.TierApollo}
 type UserTier string
 
 const (

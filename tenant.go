@@ -42,7 +42,11 @@ type usageAlertTracker struct {
 
 // TenantOptions configures the tenant service via Core config.
 //
-//	opts := tenant.TenantOptions{APIURL: "https://api.host.uk.com", APIToken: "bearer-token"}
+//	opts := tenant.TenantOptions{
+//		APIURL:   "https://api.host.uk.com",
+//		APIToken: "bearer-token",
+//		Timeout:  5 * time.Second,
+//	}
 type TenantOptions struct {
 	APIURL   string        `json:"api_url"`   // PHP API base URL
 	APIToken string        `json:"api_token"` // Bearer token
