@@ -36,6 +36,9 @@ func (r EntitlementResult) UsagePercent() *float64 {
 		return nil
 	}
 	pct := float64(*r.Used) / float64(*r.Limit) * 100
+	if pct > 100 {
+		pct = 100
+	}
 	return &pct
 }
 

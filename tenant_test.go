@@ -77,6 +77,35 @@ func TestEntitlementResult_AsError_Ugly(t *testing.T) {
 	}
 }
 
+func TestEntitlementResult_UsagePercent_Good(t *testing.T) {
+	result := Allow("pages", intPtr(10), intPtr(3))
+	pct := result.UsagePercent()
+	if pct == nil {
+		t.Fatal("expected usage percentage")
+	}
+	if *pct != 30 {
+		t.Fatalf("expected 30, got %v", *pct)
+	}
+}
+
+func TestEntitlementResult_UsagePercent_Bad(t *testing.T) {
+	result := AllowUnlimited("pages")
+	if pct := result.UsagePercent(); pct != nil {
+		t.Fatalf("expected nil for unlimited result, got %v", *pct)
+	}
+}
+
+func TestEntitlementResult_UsagePercent_Ugly(t *testing.T) {
+	result := Allow("pages", intPtr(10), intPtr(15))
+	pct := result.UsagePercent()
+	if pct == nil {
+		t.Fatal("expected capped usage percentage")
+	}
+	if *pct != 100 {
+		t.Fatalf("expected 100, got %v", *pct)
+	}
+}
+
 func TestFeature_PoolCode_Good(t *testing.T) {
 	feature := Feature{Code: "pages"}
 	if got := feature.PoolCode(); got != "pages" {
