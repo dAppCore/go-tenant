@@ -4,6 +4,7 @@ package tenant
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -50,8 +51,14 @@ func (t UserTier) MaxWorkspaces() int {
 //
 //	if u.Tier.HasFeature("api_access") { ... }
 func (t UserTier) HasFeature(code string) bool {
-	// TODO: implement — tier-to-feature mapping
-	return false
+	switch t {
+	case TierHades:
+		return true
+	case TierApollo:
+		return code == "api_access"
+	default:
+		return false
+	}
 }
 
 // UserFromCtx retrieves the authenticated user from context.
@@ -59,14 +66,29 @@ func (t UserTier) HasFeature(code string) bool {
 //
 //	user, err := tenant.UserFromCtx(ctx)
 func UserFromCtx(ctx context.Context) (*User, error) {
-	// TODO: implement
-	return nil, ErrNoUserContext
+	if ctx == nil {
+		return nil, ErrNoUserContext
+	}
+	user, _ := ctx.Value(userContextKey).(*User)
+	if user == nil {
+		return nil, ErrNoUserContext
+	}
+	return user, nil
 }
 
 // WithUser returns a new context carrying the user.
 //
 //	ctx = tenant.WithUser(ctx, user)
 func WithUser(ctx context.Context, user *User) context.Context {
-	// TODO: implement
-	return ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if user == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, userContextKey, user)
+}
+
+func normalizedFeatureCode(code string) string {
+	return strings.ToLower(strings.TrimSpace(code))
 }
