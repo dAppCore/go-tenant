@@ -56,7 +56,7 @@ func Register(c *core.Core) core.Result {
 	if c == nil {
 		return core.Result{Value: core.E("tenant", "core is nil", nil), OK: false}
 	}
-	options := tenantOptionsFromCore(c)
+	options := tenantOptionsFromCoreConfig(c)
 	service := &Tenant{
 		ServiceRuntime: core.NewServiceRuntime(c, options),
 	}
@@ -68,20 +68,20 @@ func Register(c *core.Core) core.Result {
 	return core.Result{Value: service, OK: true}
 }
 
-func tenantOptionsFromCore(c *core.Core) TenantOptions {
+func tenantOptionsFromCoreConfig(c *core.Core) TenantOptions {
 	options := TenantOptions{Timeout: 10 * time.Second}
 	if c == nil || c.Config() == nil {
 		return options
 	}
-	options.APIURL = configString(c, "api_url", "tenant.api_url")
-	options.APIToken = configString(c, "api_token", "tenant.api_token")
-	if timeout := configDuration(c, "timeout", "tenant.timeout"); timeout > 0 {
+	options.APIURL = coreConfigString(c, "api_url", "tenant.api_url")
+	options.APIToken = coreConfigString(c, "api_token", "tenant.api_token")
+	if timeout := coreConfigDuration(c, "timeout", "tenant.timeout"); timeout > 0 {
 		options.Timeout = timeout
 	}
 	return options
 }
 
-func configString(c *core.Core, keys ...string) string {
+func coreConfigString(c *core.Core, keys ...string) string {
 	if c == nil || c.Config() == nil {
 		return ""
 	}
@@ -93,7 +93,7 @@ func configString(c *core.Core, keys ...string) string {
 	return ""
 }
 
-func configDuration(c *core.Core, keys ...string) time.Duration {
+func coreConfigDuration(c *core.Core, keys ...string) time.Duration {
 	if c == nil || c.Config() == nil {
 		return 0
 	}

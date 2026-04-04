@@ -128,7 +128,7 @@ func (c *TenantClient) statusError(status int, path, body string) error {
 	return core.E("tenant", http.StatusText(status), nil)
 }
 
-func decodeEnvelope[T any](data []byte, target *T) error {
+func decodeEnvelope(data []byte, target any) error {
 	if len(data) == 0 {
 		return io.EOF
 	}

@@ -19,12 +19,12 @@ const (
 	TTLUser         = 5 * time.Minute
 )
 
-type cacheEntry[T any] struct {
-	value     T
+type cacheEntry struct {
+	value     any
 	expiresAt time.Time
 }
 
-func (e cacheEntry[T]) expired(now time.Time) bool {
+func (e cacheEntry) expired(now time.Time) bool {
 	return !e.expiresAt.IsZero() && now.After(e.expiresAt)
 }
 
@@ -35,14 +35,14 @@ type TenantCache struct {
 	store *store.Store
 
 	lock             sync.RWMutex
-	workspacesByUUID map[string]cacheEntry[*Workspace]
+	workspacesByUUID map[string]cacheEntry
 	workspaceIDs     map[int64]string
 	workspaceSlugs   map[string]string
-	packages         map[string]cacheEntry[[]Package]
-	boosts           map[string]cacheEntry[[]Boost]
-	usage            map[string]cacheEntry[int]
-	features         map[string]cacheEntry[*Feature]
-	users            map[string]cacheEntry[*User]
+	packages         map[string]cacheEntry
+	boosts           map[string]cacheEntry
+	usage            map[string]cacheEntry
+	features         map[string]cacheEntry
+	users            map[string]cacheEntry
 }
 
 // NewTenantCache creates a new cache backed by the given store handle.
@@ -52,14 +52,14 @@ type TenantCache struct {
 func NewTenantCache(st *store.Store) *TenantCache {
 	return &TenantCache{
 		store:            st,
-		workspacesByUUID: map[string]cacheEntry[*Workspace]{},
+		workspacesByUUID: map[string]cacheEntry{},
 		workspaceIDs:     map[int64]string{},
 		workspaceSlugs:   map[string]string{},
-		packages:         map[string]cacheEntry[[]Package]{},
-		boosts:           map[string]cacheEntry[[]Boost]{},
-		usage:            map[string]cacheEntry[int]{},
-		features:         map[string]cacheEntry[*Feature]{},
-		users:            map[string]cacheEntry[*User]{},
+		packages:         map[string]cacheEntry{},
+		boosts:           map[string]cacheEntry{},
+		usage:            map[string]cacheEntry{},
+		features:         map[string]cacheEntry{},
+		users:            map[string]cacheEntry{},
 	}
 }
 
@@ -175,7 +175,7 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 	}
 
 	clone := cloneWorkspace(ws)
-	c.workspacesByUUID[ws.UUID] = cacheEntry[*Workspace]{value: clone, expiresAt: c.now().Add(TTLWorkspace)}
+	c.workspacesByUUID[ws.UUID] = cacheEntry{value: clone, expiresAt: c.now().Add(TTLWorkspace)}
 	if ws.ID != 0 {
 		c.workspaceIDs[ws.ID] = ws.UUID
 		if err := c.persistString(workspaceIDGroup(ws.ID), "uuid", ws.UUID, TTLWorkspace); err != nil {
@@ -214,7 +214,8 @@ func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
 		}
 		return nil, false
 	}
-	return cloneWorkspace(entry.value), true
+	workspace, _ := entry.value.(*Workspace)
+	return cloneWorkspace(workspace), true
 }
 
 // GetWorkspaceByID retrieves a cached workspace by integer ID.
@@ -255,7 +256,7 @@ func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
 func (c *TenantCache) SetPackages(wsUUID string, packages []Package) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.packages[wsUUID] = cacheEntry[[]Package]{value: clonePackages(packages), expiresAt: c.now().Add(TTLEntitlements)}
+	c.packages[wsUUID] = cacheEntry{value: clonePackages(packages), expiresAt: c.now().Add(TTLEntitlements)}
 	if err := c.persistJSON(packagesGroup(wsUUID), "data", packages, TTLEntitlements); err != nil {
 		return err
 	}
@@ -278,13 +279,14 @@ func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
 		var packages []Package
 		if c.readJSON(packagesGroup(wsUUID), "data", &packages) {
 			c.lock.Lock()
-			c.packages[wsUUID] = cacheEntry[[]Package]{value: clonePackages(packages), expiresAt: c.now().Add(TTLEntitlements)}
+			c.packages[wsUUID] = cacheEntry{value: clonePackages(packages), expiresAt: c.now().Add(TTLEntitlements)}
 			c.lock.Unlock()
 			return clonePackages(packages), true
 		}
 		return nil, false
 	}
-	return clonePackages(entry.value), true
+	packages, _ := entry.value.([]Package)
+	return clonePackages(packages), true
 }
 
 // SetBoosts stores the active boost list for a workspace.
@@ -293,7 +295,7 @@ func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
 func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.boosts[wsUUID] = cacheEntry[[]Boost]{value: cloneBoosts(boosts), expiresAt: c.now().Add(TTLEntitlements)}
+	c.boosts[wsUUID] = cacheEntry{value: cloneBoosts(boosts), expiresAt: c.now().Add(TTLEntitlements)}
 	if err := c.persistJSON(boostsGroup(wsUUID), "data", boosts, TTLEntitlements); err != nil {
 		return err
 	}
@@ -316,13 +318,14 @@ func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
 		var boosts []Boost
 		if c.readJSON(boostsGroup(wsUUID), "data", &boosts) {
 			c.lock.Lock()
-			c.boosts[wsUUID] = cacheEntry[[]Boost]{value: cloneBoosts(boosts), expiresAt: c.now().Add(TTLEntitlements)}
+			c.boosts[wsUUID] = cacheEntry{value: cloneBoosts(boosts), expiresAt: c.now().Add(TTLEntitlements)}
 			c.lock.Unlock()
 			return cloneBoosts(boosts), true
 		}
 		return nil, false
 	}
-	return cloneBoosts(entry.value), true
+	boosts, _ := entry.value.([]Boost)
+	return cloneBoosts(boosts), true
 }
 
 // SetUsage stores the current usage count for a workspace+feature.
@@ -332,7 +335,7 @@ func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
 	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.usage[usageCacheKey(wsUUID, featureCode)] = cacheEntry[int]{value: count, expiresAt: c.now().Add(TTLUsage)}
+	c.usage[usageCacheKey(wsUUID, featureCode)] = cacheEntry{value: count, expiresAt: c.now().Add(TTLUsage)}
 	if err := c.persistString(usageGroup(wsUUID, featureCode), "count", strconv.Itoa(count), TTLUsage); err != nil {
 		return err
 	}
@@ -356,14 +359,15 @@ func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
 		if value, ok := c.readString(usageGroup(wsUUID, featureCode), "count"); ok {
 			if count, err := strconv.Atoi(value); err == nil {
 				c.lock.Lock()
-				c.usage[usageCacheKey(wsUUID, featureCode)] = cacheEntry[int]{value: count, expiresAt: c.now().Add(TTLUsage)}
+				c.usage[usageCacheKey(wsUUID, featureCode)] = cacheEntry{value: count, expiresAt: c.now().Add(TTLUsage)}
 				c.lock.Unlock()
 				return count, true
 			}
 		}
 		return 0, false
 	}
-	return entry.value, true
+	count, _ := entry.value.(int)
+	return count, true
 }
 
 // invalidateUsage drops the cached usage counter for a workspace+feature pair.
@@ -422,7 +426,7 @@ func (c *TenantCache) SetFeature(feature *Feature) error {
 	featureCode := normalizedFeatureCode(feature.Code)
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.features[featureCode] = cacheEntry[*Feature]{value: cloneFeature(feature), expiresAt: c.now().Add(TTLEntitlements)}
+	c.features[featureCode] = cacheEntry{value: cloneFeature(feature), expiresAt: c.now().Add(TTLEntitlements)}
 	if err := c.persistJSON(featureGroup(featureCode), "data", feature, TTLEntitlements); err != nil {
 		return err
 	}
@@ -446,13 +450,14 @@ func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
 		var feature Feature
 		if c.readJSON(featureGroup(code), "data", &feature) {
 			c.lock.Lock()
-			c.features[code] = cacheEntry[*Feature]{value: cloneFeature(&feature), expiresAt: c.now().Add(TTLEntitlements)}
+			c.features[code] = cacheEntry{value: cloneFeature(&feature), expiresAt: c.now().Add(TTLEntitlements)}
 			c.lock.Unlock()
 			return cloneFeature(&feature), true
 		}
 		return nil, false
 	}
-	return cloneFeature(entry.value), true
+	feature, _ := entry.value.(*Feature)
+	return cloneFeature(feature), true
 }
 
 // SetUser stores the authenticated user record.
@@ -467,7 +472,7 @@ func (c *TenantCache) SetUser(user *User) error {
 	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.users[user.UUID] = cacheEntry[*User]{value: cloneUser(user), expiresAt: c.now().Add(TTLUser)}
+	c.users[user.UUID] = cacheEntry{value: cloneUser(user), expiresAt: c.now().Add(TTLUser)}
 	if err := c.persistJSON(userGroup(user.UUID), "data", user, TTLUser); err != nil {
 		return err
 	}
@@ -490,13 +495,14 @@ func (c *TenantCache) GetUser(uuid string) (*User, bool) {
 		var user User
 		if c.readJSON(userGroup(uuid), "data", &user) {
 			c.lock.Lock()
-			c.users[uuid] = cacheEntry[*User]{value: cloneUser(&user), expiresAt: c.now().Add(TTLUser)}
+			c.users[uuid] = cacheEntry{value: cloneUser(&user), expiresAt: c.now().Add(TTLUser)}
 			c.lock.Unlock()
 			return cloneUser(&user), true
 		}
 		return nil, false
 	}
-	return cloneUser(entry.value), true
+	user, _ := entry.value.(*User)
+	return cloneUser(user), true
 }
 
 func usageCacheKey(wsUUID, featureCode string) string {
