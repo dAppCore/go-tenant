@@ -1,3 +1,3 @@
-module dappco.re/go/core/tenant
+module dappco.re/go/tenant
 
 go 1.26.0
