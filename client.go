@@ -332,14 +332,8 @@ func (c *TenantClient) GetCurrentUsage(ctx context.Context, wsUUID, featureCode 
 //
 //	err := client.RecordUsage(ctx, ws.UUID, "pages", 1, &userID, nil)
 func (c *TenantClient) RecordUsage(ctx context.Context, wsUUID, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
-	payload := map[string]any{
-		"feature_code": featureCode,
-		"quantity":     quantity,
-		"metadata":     metadata,
-	}
-	if userID != nil {
-		payload["user_id"] = *userID
-	}
+	record := newUsageRecord(0, featureCode, quantity, userID, metadata)
+	payload := record.payload()
 	_, _, err := c.request(ctx, http.MethodPost, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/usage", payload)
 	return err
 }
