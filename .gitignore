@@ -1,0 +1,6 @@
+.core/
+.idea/
+*.exe
+*.test
+*.out
+vendor/
