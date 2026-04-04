@@ -5,7 +5,6 @@ package tenant
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -63,11 +62,14 @@ func (c *TenantClient) request(ctx context.Context, method, path string, body an
 	}
 	var payload io.Reader
 	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return nil, 0, core.E("tenant", "failed to encode api request body", err)
+		result := core.JSONMarshal(body)
+		if !result.OK {
+			if err, ok := result.Value.(error); ok {
+				return nil, 0, core.E("tenant", "failed to encode api request body", err)
+			}
+			return nil, 0, core.E("tenant", "failed to encode api request body", nil)
 		}
-		payload = bytes.NewReader(data)
+		payload = bytes.NewReader(result.Value.([]byte))
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, payload)
 	if err != nil {
@@ -107,12 +109,13 @@ func (c *TenantClient) statusError(status int, path, body string) error {
 		}
 		return ErrWorkspaceNotFound
 	}
-	var envelope struct {
-		Ok    bool   `json:"ok"`
-		Error string `json:"error"`
-	}
-	if body != "" && json.Unmarshal([]byte(body), &envelope) == nil && envelope.Error != "" {
-		return core.E("tenant", envelope.Error, nil)
+	if body != "" {
+		var envelope map[string]any
+		if core.JSONUnmarshalString(body, &envelope).OK {
+			if message := stringField(envelope, "error"); message != "" {
+				return core.E("tenant", message, nil)
+			}
+		}
 	}
 	return core.E("tenant", http.StatusText(status), nil)
 }
@@ -121,56 +124,58 @@ func decodeEnvelope[T any](data []byte, target *T) error {
 	if len(data) == 0 {
 		return io.EOF
 	}
-	var envelope struct {
-		Ok    bool            `json:"ok"`
-		Error string          `json:"error"`
-		Data  json.RawMessage `json:"data"`
-	}
-	if json.Unmarshal(data, &envelope) == nil && (envelope.Data != nil || envelope.Error != "") {
-		if envelope.Error != "" && !envelope.Ok {
-			return core.E("tenant", envelope.Error, nil)
+	payload := string(data)
+	var envelope map[string]any
+	if core.JSONUnmarshalString(payload, &envelope).OK && looksLikeEnvelope(envelope) {
+		if message := stringField(envelope, "error"); message != "" && !boolField(envelope, "ok") {
+			return core.E("tenant", message, nil)
 		}
-		if len(envelope.Data) > 0 {
-			return json.Unmarshal(envelope.Data, target)
+		if nested, ok := envelope["data"]; ok && nested != nil {
+			nestedResult := core.JSONMarshal(nested)
+			if !nestedResult.OK {
+				return core.E("tenant", "invalid api payload", nil)
+			}
+			nestedJSON := string(nestedResult.Value.([]byte))
+			if result := core.JSONUnmarshalString(nestedJSON, target); result.OK {
+				return nil
+			}
+			return core.E("tenant", "invalid api payload", nil)
 		}
 	}
-	return json.Unmarshal(data, target)
+	if result := core.JSONUnmarshalString(payload, target); result.OK {
+		return nil
+	}
+	return core.E("tenant", "invalid api payload", nil)
 }
 
 func decodeCount(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, io.EOF
 	}
-	var envelope struct {
-		Ok    bool            `json:"ok"`
-		Error string          `json:"error"`
-		Data  json.RawMessage `json:"data"`
-		Count *int            `json:"count"`
-		Usage *int            `json:"usage"`
-		Value *int            `json:"value"`
-	}
-	if json.Unmarshal(data, &envelope) == nil {
-		if envelope.Error != "" && !envelope.Ok {
-			return 0, core.E("tenant", envelope.Error, nil)
+	payload := string(data)
+	var envelope map[string]any
+	if core.JSONUnmarshalString(payload, &envelope).OK && looksLikeEnvelope(envelope) {
+		if message := stringField(envelope, "error"); message != "" && !boolField(envelope, "ok") {
+			return 0, core.E("tenant", message, nil)
 		}
-		if envelope.Count != nil {
-			return *envelope.Count, nil
+		for _, key := range []string{"count", "usage", "value"} {
+			if count, ok := intField(envelope, key); ok {
+				return count, nil
+			}
 		}
-		if envelope.Usage != nil {
-			return *envelope.Usage, nil
-		}
-		if envelope.Value != nil {
-			return *envelope.Value, nil
-		}
-		if len(envelope.Data) > 0 {
-			return decodeCount(envelope.Data)
+		if nested, ok := envelope["data"]; ok && nested != nil {
+			nestedResult := core.JSONMarshal(nested)
+			if !nestedResult.OK {
+				return 0, core.E("tenant", "invalid count payload", nil)
+			}
+			return decodeCount(nestedResult.Value.([]byte))
 		}
 	}
-	if value, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
+	if value, err := strconv.Atoi(strings.TrimSpace(payload)); err == nil {
 		return value, nil
 	}
 	var direct int
-	if err := json.Unmarshal(data, &direct); err == nil {
+	if result := core.JSONUnmarshalString(payload, &direct); result.OK {
 		return direct, nil
 	}
 	return 0, core.E("tenant", "invalid count payload", nil)
@@ -311,4 +316,72 @@ func workspaceSlugFromHost(host string) string {
 		return host[:dot]
 	}
 	return host
+}
+
+func looksLikeEnvelope(fields map[string]any) bool {
+	if len(fields) == 0 {
+		return false
+	}
+	_, hasOK := fields["ok"]
+	_, hasError := fields["error"]
+	_, hasData := fields["data"]
+	return hasOK || hasError || hasData
+}
+
+func stringField(fields map[string]any, key string) string {
+	value, ok := fields[key]
+	if !ok || value == nil {
+		return ""
+	}
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return ""
+}
+
+func boolField(fields map[string]any, key string) bool {
+	value, ok := fields[key]
+	if !ok || value == nil {
+		return false
+	}
+	typed, ok := value.(bool)
+	return ok && typed
+}
+
+func intField(fields map[string]any, key string) (int, bool) {
+	value, ok := fields[key]
+	if !ok || value == nil {
+		return 0, false
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int8:
+		return int(typed), true
+	case int16:
+		return int(typed), true
+	case int32:
+		return int(typed), true
+	case int64:
+		return int(typed), true
+	case uint:
+		return int(typed), true
+	case uint8:
+		return int(typed), true
+	case uint16:
+		return int(typed), true
+	case uint32:
+		return int(typed), true
+	case uint64:
+		return int(typed), true
+	case float32:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	case string:
+		if parsed, err := strconv.Atoi(strings.TrimSpace(typed)); err == nil {
+			return parsed, true
+		}
+	}
+	return 0, false
 }
