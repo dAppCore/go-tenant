@@ -831,6 +831,34 @@ func TestTenantClient_GetWorkspaceBySubdomain_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenantClient_GetWorkspaceBySlug_Good(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":1,"uuid":"uuid-1","slug":"acme","name":"Acme","is_active":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := &TenantClient{baseURL: server.URL, token: "token"}
+	workspace, err := client.GetWorkspaceBySlug(context.Background(), "acme")
+	if err != nil {
+		t.Fatalf("get workspace: %v", err)
+	}
+	if workspace == nil || workspace.Slug != "acme" {
+		t.Fatalf("unexpected workspace: %+v", workspace)
+	}
+	if client.httpClient == nil {
+		t.Fatal("expected http client to be initialised lazily")
+	}
+	if client.httpClient.Timeout <= 0 {
+		t.Fatalf("expected positive timeout, got %v", client.httpClient.Timeout)
+	}
+}
+
 func TestTenant_CheckUsageAlerts_Good(t *testing.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}

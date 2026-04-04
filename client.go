@@ -26,7 +26,9 @@ type TenantClient struct {
 	timeout    time.Duration
 }
 
-// ClientOption configures TenantClient behaviour.
+// ClientOption applies a TenantClient setting.
+//
+//	client := tenant.NewTenantClient(url, token, tenant.WithTimeout(5*time.Second))
 type ClientOption func(*TenantClient)
 
 // NewTenantClient creates a new PHP API transport with the given base URL and bearer token.
@@ -44,7 +46,7 @@ func NewTenantClient(baseURL, token string, opts ...ClientOption) *TenantClient 
 	for _, opt := range opts {
 		opt(client)
 	}
-	client.httpClient = &http.Client{Timeout: client.timeout}
+	client.ensureHTTPClient()
 	return client
 }
 
@@ -54,9 +56,7 @@ func NewTenantClient(baseURL, token string, opts ...ClientOption) *TenantClient 
 func WithTimeout(d time.Duration) ClientOption {
 	return func(c *TenantClient) {
 		c.timeout = d
-		if c.httpClient != nil {
-			c.httpClient.Timeout = d
-		}
+		c.ensureHTTPClient()
 	}
 }
 
@@ -64,6 +64,7 @@ func (c *TenantClient) request(ctx context.Context, method, path string, body an
 	if c == nil {
 		return nil, 0, core.E("tenant", "tenant client is nil", nil)
 	}
+	c.ensureHTTPClient()
 	endpoint, err := url.JoinPath(c.baseURL, path)
 	if err != nil {
 		return nil, 0, core.E("tenant", "failed to build api request path", err)
@@ -187,6 +188,20 @@ func decodeCount(data []byte) (int, error) {
 		return direct, nil
 	}
 	return 0, core.E("tenant", "invalid count payload", nil)
+}
+
+func (c *TenantClient) ensureHTTPClient() {
+	if c == nil {
+		return
+	}
+	if c.timeout <= 0 {
+		c.timeout = 10 * time.Second
+	}
+	if c.httpClient == nil {
+		c.httpClient = &http.Client{Timeout: c.timeout}
+		return
+	}
+	c.httpClient.Timeout = c.timeout
 }
 
 // GetWorkspaceBySlug fetches a workspace by its slug.
