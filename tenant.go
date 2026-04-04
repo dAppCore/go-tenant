@@ -13,6 +13,7 @@ package tenant
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,13 @@ type Tenant struct {
 	cache         *TenantCache
 	entitlements  EntitlementService
 	alertHandlers []AlertHandler
+	mu            sync.Mutex
+	alertState    map[string]alertProgress
+}
+
+type alertProgress struct {
+	lastUsed         int
+	highestThreshold int
 }
 
 // TenantOptions configures the tenant service via Core config.
@@ -149,7 +157,7 @@ func (t *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode str
 	if err := t.entitlements.RecordUsage(ctx, ws, featureCode, quantity, userID, metadata); err != nil {
 		return err
 	}
-	result := t.Can(ctx, ws, featureCode, quantity)
+	result := t.Can(ctx, ws, featureCode, 0)
 	t.CheckUsageAlerts(ws, featureCode, result)
 	return nil
 }
@@ -180,6 +188,15 @@ func (t *Tenant) InvalidateWorkspace(wsUUID string) {
 	if t.cache != nil {
 		_ = t.cache.InvalidateWorkspace(wsUUID)
 	}
+	t.mu.Lock()
+	if len(t.alertState) > 0 {
+		for key := range t.alertState {
+			if hasAlertPrefix(key, wsUUID) {
+				delete(t.alertState, key)
+			}
+		}
+	}
+	t.mu.Unlock()
 }
 
 // OnUsageAlert registers a handler invoked when a usage threshold is crossed.
@@ -187,7 +204,12 @@ func (t *Tenant) InvalidateWorkspace(wsUUID string) {
 //
 //	ten.OnUsageAlert(func(a tenant.UsageAlert) { notify(a.WorkspaceUUID, a.Threshold) })
 func (t *Tenant) OnUsageAlert(h AlertHandler) {
+	if t == nil || h == nil {
+		return
+	}
+	t.mu.Lock()
 	t.alertHandlers = append(t.alertHandlers, h)
+	t.mu.Unlock()
 }
 
 // Scope returns a configured WorkspaceScope for middleware wiring.
@@ -210,22 +232,42 @@ func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result Enti
 	if pct == nil {
 		return
 	}
-	now := time.Now()
 	percentage := *pct
+	used := *result.Used
+	limit := *result.Limit
+	key := alertStateKey(ws.UUID, featureCode)
+	now := time.Now()
+
+	t.mu.Lock()
+	state := t.alertState[key]
+	if used < state.lastUsed {
+		state.highestThreshold = 0
+	}
+	alerts := make([]UsageAlert, 0, 3)
 	for _, threshold := range []int{AlertThresholdWarning, AlertThresholdCritical, AlertThresholdLimit} {
-		if percentage < float64(threshold) {
-			continue
+		if percentage >= float64(threshold) && threshold > state.highestThreshold {
+			alerts = append(alerts, UsageAlert{
+				WorkspaceUUID: ws.UUID,
+				FeatureCode:   featureCode,
+				Threshold:     threshold,
+				Used:          used,
+				Limit:         limit,
+				Percentage:    percentage,
+				TriggeredAt:   now,
+			})
+			state.highestThreshold = threshold
 		}
-		alert := UsageAlert{
-			WorkspaceUUID: ws.UUID,
-			FeatureCode:   featureCode,
-			Threshold:     threshold,
-			Used:          *result.Used,
-			Limit:         *result.Limit,
-			Percentage:    percentage,
-			TriggeredAt:   now,
-		}
-		for _, handler := range t.alertHandlers {
+	}
+	state.lastUsed = used
+	if t.alertState == nil {
+		t.alertState = map[string]alertProgress{}
+	}
+	t.alertState[key] = state
+	handlers := append([]AlertHandler(nil), t.alertHandlers...)
+	t.mu.Unlock()
+
+	for _, alert := range alerts {
+		for _, handler := range handlers {
 			handler(alert)
 		}
 	}
@@ -238,4 +280,15 @@ func indexRune(value string, target rune) int {
 		}
 	}
 	return -1
+}
+
+func alertStateKey(wsUUID, featureCode string) string {
+	return wsUUID + "\x00" + featureCode
+}
+
+func hasAlertPrefix(key, wsUUID string) bool {
+	if len(key) < len(wsUUID)+1 {
+		return false
+	}
+	return key[:len(wsUUID)] == wsUUID && key[len(wsUUID)] == '\x00'
 }

@@ -152,7 +152,7 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	if ws == nil {
 		return Deny(featureCode, "no workspace provided", nil, nil)
 	}
-	if quantity <= 0 {
+	if quantity < 0 {
 		quantity = 1
 	}
 	feature, err := s.loadFeature(ctx, featureCode)
@@ -249,7 +249,9 @@ func (s *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace
 		}
 	}
 	if s.cache != nil {
-		if used, ok := s.cache.GetUsage(ws.UUID, poolCode); ok {
+		if s.client != nil {
+			s.cache.invalidateUsage(ws.UUID, poolCode)
+		} else if used, ok := s.cache.GetUsage(ws.UUID, poolCode); ok {
 			_ = s.cache.SetUsage(ws.UUID, poolCode, used+quantity)
 		} else {
 			_ = s.cache.SetUsage(ws.UUID, poolCode, quantity)
