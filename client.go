@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"dappco.re/go/core"
@@ -34,8 +33,11 @@ type ClientOption func(*TenantClient)
 //
 //	client := tenant.NewTenantClient(url, token, tenant.WithTimeout(5*time.Second))
 func NewTenantClient(baseURL, token string, opts ...ClientOption) *TenantClient {
+	for core.HasSuffix(baseURL, "/") {
+		baseURL = core.TrimSuffix(baseURL, "/")
+	}
 	client := &TenantClient{
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL: baseURL,
 		token:   token,
 		timeout: 10 * time.Second,
 	}
@@ -88,7 +90,7 @@ func (c *TenantClient) request(ctx context.Context, method, path string, body an
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "timeout") {
+		if errors.Is(err, context.DeadlineExceeded) || core.Contains(err.Error(), "timeout") {
 			return nil, 0, ErrClientTimeout
 		}
 		return nil, 0, core.E("tenant", "api request failed", err)
@@ -110,7 +112,7 @@ func (c *TenantClient) request(ctx context.Context, method, path string, body an
 
 func (c *TenantClient) statusError(status int, path, body string) error {
 	if status == http.StatusNotFound {
-		if strings.Contains(path, "/features/") {
+		if core.Contains(path, "/features/") {
 			return ErrFeatureNotFound
 		}
 		return ErrWorkspaceNotFound
@@ -177,7 +179,7 @@ func decodeCount(data []byte) (int, error) {
 			return decodeCount(nestedResult.Value.([]byte))
 		}
 	}
-	if value, err := strconv.Atoi(strings.TrimSpace(payload)); err == nil {
+	if value, err := strconv.Atoi(core.Trim(payload)); err == nil {
 		return value, nil
 	}
 	var direct int
@@ -329,15 +331,16 @@ func (c *TenantClient) GetFeature(ctx context.Context, code string) (*Feature, e
 }
 
 func workspaceSlugFromHost(host string) string {
-	host = strings.TrimSpace(strings.ToLower(host))
+	host = core.Lower(core.Trim(host))
 	if host == "" {
 		return ""
 	}
 	if parsed, err := url.Parse("scheme://" + host); err == nil && parsed.Hostname() != "" {
 		host = parsed.Hostname()
 	}
-	if dot := strings.Index(host, "."); dot > 0 {
-		return host[:dot]
+	parts := core.SplitN(host, ".", 2)
+	if len(parts) > 0 && parts[0] != "" {
+		return parts[0]
 	}
 	return host
 }
@@ -403,7 +406,7 @@ func intField(fields map[string]any, key string) (int, bool) {
 	case float64:
 		return int(typed), true
 	case string:
-		if parsed, err := strconv.Atoi(strings.TrimSpace(typed)); err == nil {
+		if parsed, err := strconv.Atoi(core.Trim(typed)); err == nil {
 			return parsed, true
 		}
 	}

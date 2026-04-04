@@ -4,8 +4,9 @@ package tenant
 
 import (
 	"context"
-	"strings"
 	"time"
+
+	"dappco.re/go/core"
 )
 
 // User is the authenticated identity. Tier controls feature access for personal namespaces.
@@ -91,5 +92,5 @@ func WithUser(ctx context.Context, user *User) context.Context {
 }
 
 func normalizedFeatureCode(code string) string {
-	return strings.ToLower(strings.TrimSpace(code))
+	return core.Lower(core.Trim(code))
 }

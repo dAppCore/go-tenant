@@ -6,7 +6,8 @@ import (
 	"context"
 	"net/http"
 	"net/netip"
-	"strings"
+
+	"dappco.re/go/core"
 )
 
 // WorkspaceScope resolves and injects workspace context for HTTP handlers.
@@ -135,8 +136,9 @@ func cleanHost(host string) string {
 	if parsed, err := netip.ParseAddrPort(host); err == nil {
 		return parsed.Addr().String()
 	}
-	if colon := strings.LastIndex(host, ":"); colon > 0 {
-		return host[:colon]
+	parts := core.Split(host, ":")
+	if len(parts) > 1 {
+		return parts[0]
 	}
 	return host
 }
