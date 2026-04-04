@@ -144,6 +144,12 @@ type localEntitlementService struct {
 	client *TenantClient
 }
 
+type packageLimitSnapshot struct {
+	Limit                int
+	HasFeatureAssignment bool
+	Unlimited            bool
+}
+
 func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featureCode string, quantity int) EntitlementResult {
 	featureCode = normalizedFeatureCode(featureCode)
 	if ws == nil {
@@ -161,8 +167,8 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 	boosts, _ := s.loadBoosts(ctx, ws.UUID)
 	used, _ := s.loadUsage(ctx, ws.UUID, poolCode)
 
-	limit, hasFeatureAssignment, unlimited := packageLimitForFeature(packages, poolCode)
-	if unlimited {
+	packageLimit := packageLimitForFeature(packages, poolCode)
+	if packageLimit.Unlimited {
 		return AllowUnlimited(featureCode)
 	}
 
@@ -181,38 +187,38 @@ func (s *localEntitlementService) Can(ctx context.Context, ws *Workspace, featur
 		case BoostTypeEnable:
 			hasEnableBoost = true
 		default:
-			if !hasFeatureAssignment {
+			if !packageLimit.HasFeatureAssignment {
 				continue
 			}
 			remaining := boost.Remaining()
 			if remaining > 0 {
-				limit += remaining
+				packageLimit.Limit += remaining
 			}
 		}
 	}
 
 	if feature.IsUnlimited() {
-		if hasFeatureAssignment {
+		if packageLimit.HasFeatureAssignment {
 			return AllowUnlimited(featureCode)
 		}
 		return Deny(featureCode, "feature not in any package", nil, nil)
 	}
 
 	if feature.IsBoolean() {
-		if hasFeatureAssignment || hasEnableBoost {
+		if packageLimit.HasFeatureAssignment || hasEnableBoost {
 			return Allow(featureCode, nil, nil)
 		}
 		return Deny(featureCode, "feature not in any package", nil, nil)
 	}
 
-	if !hasFeatureAssignment {
+	if !packageLimit.HasFeatureAssignment {
 		return Deny(featureCode, "feature not in any package", nil, nil)
 	}
 
-	if used+quantity > limit {
-		return Deny(featureCode, "limit reached", &limit, &used)
+	if used+quantity > packageLimit.Limit {
+		return Deny(featureCode, "limit reached", &packageLimit.Limit, &used)
 	}
-	return Allow(featureCode, &limit, &used)
+	return Allow(featureCode, &packageLimit.Limit, &used)
 }
 
 func (s *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
@@ -383,8 +389,8 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 	packages, _ := s.loadPackages(ctx, wsUUID)
 	boosts, _ := s.loadBoosts(ctx, wsUUID)
 
-	limit, hasFeatureAssignment, unlimited := packageLimitForFeature(packages, poolCode)
-	if unlimited {
+	packageLimit := packageLimitForFeature(packages, poolCode)
+	if packageLimit.Unlimited {
 		return nil, true, s.loadUsedCount(ctx, wsUUID, poolCode)
 	}
 
@@ -403,33 +409,33 @@ func (s *localEntitlementService) summaryForFeature(ctx context.Context, wsUUID 
 		case BoostTypeEnable:
 			hasEnableBoost = true
 		case BoostTypeAddLimit:
-			if !hasFeatureAssignment {
+			if !packageLimit.HasFeatureAssignment {
 				continue
 			}
 			remaining := boost.Remaining()
 			if remaining > 0 {
-				limit += remaining
+				packageLimit.Limit += remaining
 			}
 		}
 	}
 
 	if feature.IsUnlimited() {
-		if hasFeatureAssignment {
+		if packageLimit.HasFeatureAssignment {
 			return nil, true, s.loadUsedCount(ctx, wsUUID, poolCode)
 		}
 		return nil, false, s.loadUsedCount(ctx, wsUUID, poolCode)
 	}
 	if feature.IsBoolean() {
-		if hasFeatureAssignment || hasEnableBoost {
+		if packageLimit.HasFeatureAssignment || hasEnableBoost {
 			return nil, false, nil
 		}
 		return nil, false, nil
 	}
-	if !hasFeatureAssignment {
+	if !packageLimit.HasFeatureAssignment {
 		return nil, false, s.loadUsedCount(ctx, wsUUID, poolCode)
 	}
 	used, _ := s.loadUsage(ctx, wsUUID, poolCode)
-	return &limit, false, &used
+	return &packageLimit.Limit, false, &used
 }
 
 func (s *localEntitlementService) loadUsedCount(ctx context.Context, wsUUID, featureCode string) *int {
@@ -437,28 +443,29 @@ func (s *localEntitlementService) loadUsedCount(ctx context.Context, wsUUID, fea
 	return &used
 }
 
-func packageLimitForFeature(packages []Package, featureCode string) (int, bool, bool) {
+func packageLimitForFeature(packages []Package, featureCode string) packageLimitSnapshot {
 	featureCode = normalizedFeatureCode(featureCode)
-	limit := 0
+	snapshot := packageLimitSnapshot{}
 	highestNonStackableLimit := 0
-	hasFeatureAssignment := false
 	hasNonStackableLimit := false
 
 	for _, pkg := range packages {
 		if !pkg.IsActive || !pkg.includesFeature(featureCode) {
 			continue
 		}
-		hasFeatureAssignment = true
+		snapshot.HasFeatureAssignment = true
 
 		limitValue := pkg.GetFeatureLimit(featureCode)
 		if limitValue == nil {
 			continue
 		}
 		if *limitValue == -1 {
-			return 0, true, true
+			snapshot.Unlimited = true
+			snapshot.Limit = 0
+			return snapshot
 		}
 		if pkg.IsStackable {
-			limit += *limitValue
+			snapshot.Limit += *limitValue
 			continue
 		}
 		if !hasNonStackableLimit || *limitValue > highestNonStackableLimit {
@@ -468,7 +475,7 @@ func packageLimitForFeature(packages []Package, featureCode string) (int, bool, 
 	}
 
 	if hasNonStackableLimit {
-		limit += highestNonStackableLimit
+		snapshot.Limit += highestNonStackableLimit
 	}
-	return limit, hasFeatureAssignment, false
+	return snapshot
 }

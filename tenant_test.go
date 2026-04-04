@@ -397,6 +397,38 @@ func TestTenant_Can_UnlimitedFeature_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenant_Can_NonStackablePackagesUseHighestLimit_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
+	packages := []Package{
+		{Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(10)}}},
+		{Code: "growth", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(20)}}},
+		{Code: "addon", IsActive: true, IsStackable: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(3)}}},
+	}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetPackages(workspace.UUID, packages); err != nil {
+		t.Fatalf("set packages: %v", err)
+	}
+	if err := cache.SetUsage(workspace.UUID, "pages", 24); err != nil {
+		t.Fatalf("set usage: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	result := tenant.Can(context.Background(), workspace, "pages", 1)
+	if result.IsAllowed() {
+		t.Fatalf("expected denial once highest non-stackable + stackable limit is exhausted, got %+v", result)
+	}
+	if result.Limit == nil || *result.Limit != 23 {
+		t.Fatalf("expected effective limit=23, got %+v", result.Limit)
+	}
+}
+
 func TestTenant_Can_BooleanPackage_Good(t *testing.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
@@ -593,6 +625,44 @@ func TestTenant_GetWorkspaceByID_Ugly(t *testing.T) {
 	var tenant *Tenant
 	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !errors.Is(err, ErrWorkspaceNotFound) {
 		t.Fatalf("expected ErrWorkspaceNotFound for nil tenant, got %v", err)
+	}
+}
+
+func TestTenant_GetUsageSummary_NonStackablePackagesUseHighestLimit_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
+	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
+	packages := []Package{
+		{Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(10)}}},
+		{Code: "growth", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(20)}}},
+		{Code: "addon", IsActive: true, IsStackable: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: intPtr(3)}}},
+	}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	if err := cache.SetFeature(feature); err != nil {
+		t.Fatalf("set feature: %v", err)
+	}
+	if err := cache.SetPackages(workspace.UUID, packages); err != nil {
+		t.Fatalf("set packages: %v", err)
+	}
+	if err := cache.SetUsage(workspace.UUID, "pages", 7); err != nil {
+		t.Fatalf("set usage: %v", err)
+	}
+
+	tenant := &Tenant{cache: cache}
+	items, err := tenant.GetUsageSummary(context.Background(), workspace)
+	if err != nil {
+		t.Fatalf("get usage summary: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one summary row, got %+v", items)
+	}
+	if items[0].Limit == nil || *items[0].Limit != 23 {
+		t.Fatalf("expected effective limit=23, got %+v", items[0].Limit)
+	}
+	if items[0].Remaining == nil || *items[0].Remaining != 16 {
+		t.Fatalf("expected remaining=16, got %+v", items[0].Remaining)
 	}
 }
 
