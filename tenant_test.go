@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -276,6 +277,84 @@ func TestTenant_RecordUsage_Ugly(t *testing.T) {
 	}
 }
 
+func TestTenant_GetWorkspaceByID_Good(t *testing.T) {
+	cache := NewTenantCache(nil)
+	workspace := &Workspace{ID: 42, UUID: "uuid-42", Slug: "acme"}
+	if err := cache.SetWorkspace(workspace); err != nil {
+		t.Fatalf("set workspace: %v", err)
+	}
+	tenant := &Tenant{cache: cache}
+	got, err := tenant.GetWorkspaceByID(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("get workspace: %v", err)
+	}
+	if got == nil || got.UUID != "uuid-42" {
+		t.Fatalf("unexpected workspace: %+v", got)
+	}
+}
+
+func TestTenant_GetWorkspaceByID_Bad(t *testing.T) {
+	tenant := &Tenant{cache: NewTenantCache(nil)}
+	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !errors.Is(err, ErrWorkspaceNotFound) {
+		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
+	}
+}
+
+func TestTenant_GetWorkspaceByID_Ugly(t *testing.T) {
+	var tenant *Tenant
+	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !errors.Is(err, ErrWorkspaceNotFound) {
+		t.Fatalf("expected ErrWorkspaceNotFound for nil tenant, got %v", err)
+	}
+}
+
+func TestTenantClient_GetWorkspaceBySubdomain_Good(t *testing.T) {
+	var subdomainHit atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":1,"uuid":"uuid-1","slug":"acme","name":"Acme","is_active":true}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/subdomain/acme.host.uk.com":
+			subdomainHit.Store(true)
+			http.Error(w, "unexpected subdomain lookup", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewTenantClient(server.URL, "token")
+	workspace, err := client.GetWorkspaceBySubdomain(context.Background(), "acme.host.uk.com")
+	if err != nil {
+		t.Fatalf("get workspace: %v", err)
+	}
+	if workspace == nil || workspace.Slug != "acme" {
+		t.Fatalf("unexpected workspace: %+v", workspace)
+	}
+	if subdomainHit.Load() {
+		t.Fatal("expected slug lookup to short-circuit before subdomain endpoint")
+	}
+}
+
+func TestTenantClient_GetWorkspaceBySubdomain_Bad(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := NewTenantClient(server.URL, "token")
+	if _, err := client.GetWorkspaceBySubdomain(context.Background(), "missing.host.uk.com"); !errors.Is(err, ErrWorkspaceNotFound) {
+		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
+	}
+}
+
+func TestTenantClient_GetWorkspaceBySubdomain_Ugly(t *testing.T) {
+	client := NewTenantClient("://bad-url", "token")
+	if _, err := client.GetWorkspaceBySubdomain(context.Background(), "acme.host.uk.com"); err == nil {
+		t.Fatal("expected error for invalid base URL")
+	}
+}
+
 func TestTenant_CheckUsageAlerts_Good(t *testing.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}
@@ -334,6 +413,53 @@ func TestTenant_CheckUsageAlerts_Ugly(t *testing.T) {
 
 	if len(fired) != 2 {
 		t.Fatalf("expected alerts to retrigger after usage reset, got %v", fired)
+	}
+}
+
+func TestTenant_CheckUsageAlerts_Overflow_Good(t *testing.T) {
+	tenant := &Tenant{}
+	workspace := &Workspace{UUID: "uuid-7"}
+	var fired []int
+	tenant.OnUsageAlert(func(alert UsageAlert) {
+		fired = append(fired, alert.Threshold)
+	})
+
+	limit := 10
+	used := 11
+	tenant.CheckUsageAlerts(workspace, "pages", Deny("pages", "limit reached", &limit, &used))
+
+	if len(fired) != 3 {
+		t.Fatalf("expected all thresholds to fire when already over limit, got %v", fired)
+	}
+	if fired[0] != AlertThresholdWarning || fired[1] != AlertThresholdCritical || fired[2] != AlertThresholdLimit {
+		t.Fatalf("unexpected thresholds: %v", fired)
+	}
+}
+
+func TestWorkspaceScope_Middleware_InvalidID_Bad(t *testing.T) {
+	tenant := &Tenant{
+		cache: NewTenantCache(nil),
+	}
+	_ = tenant.cache.SetWorkspace(&Workspace{ID: 7, UUID: "uuid-7", Slug: "acme"})
+	scope := NewWorkspaceScope(tenant)
+
+	handlerCalled := false
+	handler := scope.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	req.Header.Set("X-Workspace-ID", "bogus")
+	req.Header.Set("X-Workspace-Slug", "acme")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+	if handlerCalled {
+		t.Fatal("expected request to stop before handler")
 	}
 }
 

@@ -106,11 +106,10 @@ func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
 		return nil, ErrNoWorkspaceContext
 	}
 	if idValue := r.Header.Get("X-Workspace-ID"); idValue != "" {
-		if id, err := parseInt64(idValue); err == nil && s.tenant.cache != nil {
-			if workspace, ok := s.tenant.cache.GetWorkspaceByID(id); ok {
-				return workspace, nil
-			}
+		if id, err := parseInt64(idValue); err == nil {
+			return s.tenant.GetWorkspaceByID(r.Context(), id)
 		}
+		return nil, ErrNoWorkspaceContext
 	}
 	if slug := r.Header.Get("X-Workspace-Slug"); slug != "" {
 		return s.tenant.GetWorkspace(r.Context(), slug)

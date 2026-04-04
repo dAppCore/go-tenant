@@ -102,6 +102,19 @@ func (t *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspac
 	return workspace, nil
 }
 
+// GetWorkspaceByID resolves a workspace by integer ID from the local cache.
+//
+//	ws, err := ten.GetWorkspaceByID(ctx, 42)
+func (t *Tenant) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, error) {
+	if t == nil || t.cache == nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	if workspace, ok := t.cache.GetWorkspaceByID(id); ok {
+		return workspace, nil
+	}
+	return nil, ErrWorkspaceNotFound
+}
+
 // GetWorkspaceBySubdomain resolves the workspace for an incoming hostname.
 //
 //	ws, err := ten.GetWorkspaceBySubdomain(ctx, r.Host)
@@ -228,7 +241,7 @@ func (t *Tenant) Scope() *WorkspaceScope {
 //
 //	ten.CheckUsageAlerts(ws, "pages", result)
 func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result EntitlementResult) {
-	if t == nil || ws == nil || !result.Allowed || result.Limit == nil || result.Used == nil {
+	if t == nil || ws == nil || result.Limit == nil || result.Used == nil {
 		return
 	}
 	pct := result.UsagePercent()

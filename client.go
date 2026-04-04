@@ -202,6 +202,13 @@ func (c *TenantClient) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Wo
 
 // GetWorkspaceBySubdomain resolves a hostname to a workspace.
 func (c *TenantClient) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
+	if slug := workspaceSlugFromHost(host); slug != "" {
+		if workspace, err := c.GetWorkspaceBySlug(ctx, slug); err == nil {
+			return workspace, nil
+		} else if !errors.Is(err, ErrWorkspaceNotFound) {
+			return nil, err
+		}
+	}
 	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/subdomain/"+url.PathEscape(host), nil)
 	if err != nil {
 		return nil, err
@@ -286,4 +293,18 @@ func (c *TenantClient) GetFeature(ctx context.Context, code string) (*Feature, e
 		return nil, err
 	}
 	return &feature, nil
+}
+
+func workspaceSlugFromHost(host string) string {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "" {
+		return ""
+	}
+	if parsed, err := url.Parse("scheme://" + host); err == nil && parsed.Hostname() != "" {
+		host = parsed.Hostname()
+	}
+	if dot := strings.Index(host, "."); dot > 0 {
+		return host[:dot]
+	}
+	return host
 }
