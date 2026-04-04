@@ -2,129 +2,282 @@
 
 package tenant
 
-import "time"
+import (
+	"errors"
+	"sync"
+	"time"
+)
 
 // TTL constants matching PHP's cache configuration.
 const (
-	TTLEntitlements = 5 * time.Minute  // packages, boosts, feature definitions
-	TTLUsage        = 60 * time.Second // usage counters (more volatile)
-	TTLWorkspace    = 5 * time.Minute  // workspace record
-	TTLUser         = 5 * time.Minute  // user record
+	TTLEntitlements = 5 * time.Minute // packages, boosts, feature definitions
+	TTLUsage        = 60 * time.Second
+	TTLWorkspace    = 5 * time.Minute
+	TTLUser         = 5 * time.Minute
 )
 
-// TenantCache provides workspace-scoped caching over go-store.
-// Groups are namespaced by workspace UUID to prevent cross-tenant leakage.
-//
-//	cache := tenant.NewTenantCache(store)
-//	cache.SetPackages(ws.UUID, pkgs)
-//	pkgs, ok := cache.GetPackages(ws.UUID)
-type TenantCache struct {
-	// store is the go-store instance backing this cache.
-	// TODO: type will be *store.Store once go-store is wired
-	store any
+type cacheEntry[T any] struct {
+	value     T
+	expiresAt time.Time
 }
 
-// NewTenantCache creates a new cache backed by the given go-store instance.
-//
-//	cache := tenant.NewTenantCache(st)
+func (e cacheEntry[T]) expired(now time.Time) bool {
+	return !e.expiresAt.IsZero() && now.After(e.expiresAt)
+}
+
+// TenantCache provides workspace-scoped caching over an in-memory store.
+// The external go-store dependency is not available in this checkout, so the
+// cache keeps the RFC behaviour locally with the same TTL semantics.
+type TenantCache struct {
+	store any
+
+	mu               sync.RWMutex
+	workspacesByUUID map[string]cacheEntry[*Workspace]
+	workspaceIDs     map[int64]string
+	workspaceSlugs   map[string]string
+	packages         map[string]cacheEntry[[]Package]
+	boosts           map[string]cacheEntry[[]Boost]
+	usage            map[string]cacheEntry[int]
+	features         map[string]cacheEntry[*Feature]
+}
+
+// NewTenantCache creates a new cache backed by the given store handle.
+// The store handle is retained for compatibility but not used directly.
 func NewTenantCache(st any) *TenantCache {
-	// TODO: implement — accept *store.Store
-	return &TenantCache{store: st}
+	return &TenantCache{
+		store:            st,
+		workspacesByUUID: map[string]cacheEntry[*Workspace]{},
+		workspaceIDs:     map[int64]string{},
+		workspaceSlugs:   map[string]string{},
+		packages:         map[string]cacheEntry[[]Package]{},
+		boosts:           map[string]cacheEntry[[]Boost]{},
+		usage:            map[string]cacheEntry[int]{},
+		features:         map[string]cacheEntry[*Feature]{},
+	}
+}
+
+func (c *TenantCache) now() time.Time {
+	return time.Now()
+}
+
+func clonePackages(packages []Package) []Package {
+	if packages == nil {
+		return nil
+	}
+	clone := make([]Package, len(packages))
+	copy(clone, packages)
+	return clone
+}
+
+func cloneBoosts(boosts []Boost) []Boost {
+	if boosts == nil {
+		return nil
+	}
+	clone := make([]Boost, len(boosts))
+	copy(clone, boosts)
+	return clone
+}
+
+func cloneFeature(feature *Feature) *Feature {
+	if feature == nil {
+		return nil
+	}
+	clone := *feature
+	return &clone
 }
 
 // SetWorkspace stores the workspace record.
-//
-//	cache.SetWorkspace(ws)
 func (c *TenantCache) SetWorkspace(ws *Workspace) error {
-	// TODO: implement — group: ws:{uuid}:record, key: data, TTL: 5 min
+	if ws == nil {
+		return ErrNoWorkspaceContext
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	clone := cloneWorkspace(ws)
+	c.workspacesByUUID[ws.UUID] = cacheEntry[*Workspace]{value: clone, expiresAt: c.now().Add(TTLWorkspace)}
+	if ws.ID != 0 {
+		c.workspaceIDs[ws.ID] = ws.UUID
+	}
+	if ws.Slug != "" {
+		c.workspaceSlugs[ws.Slug] = ws.UUID
+	}
 	return nil
 }
 
 // GetWorkspace retrieves a cached workspace by UUID. Returns nil, false on miss.
-//
-//	ws, ok := cache.GetWorkspace("550e8400-...")
 func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
-	// TODO: implement
-	return nil, false
+	c.mu.RLock()
+	entry, ok := c.workspacesByUUID[uuid]
+	c.mu.RUnlock()
+	if !ok || entry.expired(c.now()) {
+		if ok {
+			c.mu.Lock()
+			delete(c.workspacesByUUID, uuid)
+			c.mu.Unlock()
+		}
+		return nil, false
+	}
+	return cloneWorkspace(entry.value), true
+}
+
+// GetWorkspaceByID retrieves a cached workspace by integer ID.
+func (c *TenantCache) GetWorkspaceByID(id int64) (*Workspace, bool) {
+	c.mu.RLock()
+	uuid, ok := c.workspaceIDs[id]
+	c.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	return c.GetWorkspace(uuid)
 }
 
 // GetWorkspaceBySlug retrieves a cached workspace by slug via UUID indirection.
-//
-//	ws, ok := cache.GetWorkspaceBySlug("acme")
 func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
-	// TODO: implement — group: ws:slug:{slug}, key: uuid → then GetWorkspace
-	return nil, false
+	c.mu.RLock()
+	uuid, ok := c.workspaceSlugs[slug]
+	c.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	return c.GetWorkspace(uuid)
 }
 
 // SetPackages stores the active package list for a workspace.
-//
-//	cache.SetPackages(ws.UUID, pkgs)
-func (c *TenantCache) SetPackages(wsUUID string, pkgs []Package) error {
-	// TODO: implement — group: ws:{uuid}:packages, key: data, TTL: 5 min
+func (c *TenantCache) SetPackages(wsUUID string, packages []Package) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.packages[wsUUID] = cacheEntry[[]Package]{value: clonePackages(packages), expiresAt: c.now().Add(TTLEntitlements)}
 	return nil
 }
 
 // GetPackages retrieves cached packages. Returns nil, false on miss.
-//
-//	pkgs, ok := cache.GetPackages(ws.UUID)
 func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
-	// TODO: implement
-	return nil, false
+	c.mu.RLock()
+	entry, ok := c.packages[wsUUID]
+	c.mu.RUnlock()
+	if !ok || entry.expired(c.now()) {
+		if ok {
+			c.mu.Lock()
+			delete(c.packages, wsUUID)
+			c.mu.Unlock()
+		}
+		return nil, false
+	}
+	return clonePackages(entry.value), true
 }
 
 // SetBoosts stores the active boost list for a workspace.
-//
-//	cache.SetBoosts(ws.UUID, boosts)
 func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) error {
-	// TODO: implement — group: ws:{uuid}:boosts, key: data, TTL: 5 min
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.boosts[wsUUID] = cacheEntry[[]Boost]{value: cloneBoosts(boosts), expiresAt: c.now().Add(TTLEntitlements)}
 	return nil
 }
 
 // GetBoosts retrieves cached boosts. Returns nil, false on miss.
-//
-//	boosts, ok := cache.GetBoosts(ws.UUID)
 func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
-	// TODO: implement
-	return nil, false
+	c.mu.RLock()
+	entry, ok := c.boosts[wsUUID]
+	c.mu.RUnlock()
+	if !ok || entry.expired(c.now()) {
+		if ok {
+			c.mu.Lock()
+			delete(c.boosts, wsUUID)
+			c.mu.Unlock()
+		}
+		return nil, false
+	}
+	return cloneBoosts(entry.value), true
 }
 
 // SetUsage stores the current usage count for a workspace+feature.
-//
-//	cache.SetUsage(ws.UUID, "pages", 7)
 func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
-	// TODO: implement — group: ws:{uuid}:usage:{code}, key: count, TTL: 60 sec
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.usage[usageCacheKey(wsUUID, featureCode)] = cacheEntry[int]{value: count, expiresAt: c.now().Add(TTLUsage)}
 	return nil
 }
 
 // GetUsage retrieves a cached usage count. Returns 0, false on miss.
-//
-//	used, ok := cache.GetUsage(ws.UUID, "pages")
 func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
-	// TODO: implement
-	return 0, false
+	c.mu.RLock()
+	entry, ok := c.usage[usageCacheKey(wsUUID, featureCode)]
+	c.mu.RUnlock()
+	if !ok || entry.expired(c.now()) {
+		if ok {
+			c.mu.Lock()
+			delete(c.usage, usageCacheKey(wsUUID, featureCode))
+			c.mu.Unlock()
+		}
+		return 0, false
+	}
+	return entry.value, true
 }
 
 // InvalidateWorkspace drops all cache entries for this workspace UUID.
-// Called by RecordUsage and by external invalidation signals.
-//
-//	cache.InvalidateWorkspace(ws.UUID)
 func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
-	// TODO: implement — drop ws:{uuid}:* groups
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	delete(c.workspacesByUUID, wsUUID)
+	delete(c.packages, wsUUID)
+	delete(c.boosts, wsUUID)
+
+	for key := range c.usage {
+		if hasUsagePrefix(key, wsUUID) {
+			delete(c.usage, key)
+		}
+	}
+	for id, uuid := range c.workspaceIDs {
+		if uuid == wsUUID {
+			delete(c.workspaceIDs, id)
+		}
+	}
+	for slug, uuid := range c.workspaceSlugs {
+		if uuid == wsUUID {
+			delete(c.workspaceSlugs, slug)
+		}
+	}
 	return nil
 }
 
 // SetFeature stores a feature definition by code. Features are global.
-//
-//	cache.SetFeature(feat)
-func (c *TenantCache) SetFeature(feat *Feature) error {
-	// TODO: implement — group: feature:{code}, key: data, TTL: 5 min
+func (c *TenantCache) SetFeature(feature *Feature) error {
+	if feature == nil {
+		return ErrFeatureNotFound
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.features[feature.Code] = cacheEntry[*Feature]{value: cloneFeature(feature), expiresAt: c.now().Add(TTLEntitlements)}
 	return nil
 }
 
 // GetFeature retrieves a cached feature definition by code.
-//
-//	feat, ok := cache.GetFeature("pages")
 func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
-	// TODO: implement
-	return nil, false
+	c.mu.RLock()
+	entry, ok := c.features[code]
+	c.mu.RUnlock()
+	if !ok || entry.expired(c.now()) {
+		if ok {
+			c.mu.Lock()
+			delete(c.features, code)
+			c.mu.Unlock()
+		}
+		return nil, false
+	}
+	return cloneFeature(entry.value), true
 }
+
+func usageCacheKey(wsUUID, featureCode string) string {
+	return wsUUID + "\x00" + featureCode
+}
+
+func hasUsagePrefix(key, wsUUID string) bool {
+	if len(key) < len(wsUUID)+1 {
+		return false
+	}
+	return key[:len(wsUUID)] == wsUUID && key[len(wsUUID)] == '\x00'
+}
+
+var errCacheMiss = errors.New("cache miss")

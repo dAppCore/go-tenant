@@ -5,16 +5,22 @@ package tenant
 import (
 	"context"
 	"net/http"
+	"net/netip"
+	"strings"
 )
 
 // WorkspaceScope resolves and injects workspace context for HTTP handlers.
 // Resolution order (matches PHP's RequireWorkspaceContext.resolveWorkspace):
+//
 //  1. X-Workspace-ID header (integer workspace ID)
+//
 //  2. X-Workspace-Slug header (slug string)
+//
 //  3. Host header subdomain (e.g., "acme" from "acme.host.uk.com")
+//
 //  4. ?workspace= query parameter (slug)
 //
-//	router.Use(tenant.NewWorkspaceScope(tenantSvc).Middleware())
+//     router.Use(tenant.NewWorkspaceScope(tenantSvc).Middleware())
 type WorkspaceScope struct {
 	tenant *Tenant
 	strict bool
@@ -41,9 +47,19 @@ func (s *WorkspaceScope) WithStrict(strict bool) *WorkspaceScope {
 //
 //	router.Use(scope.Middleware())
 func (s *WorkspaceScope) Middleware() func(http.Handler) http.Handler {
-	// TODO: implement — resolve workspace from request, inject into context
 	return func(next http.Handler) http.Handler {
-		return next
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			workspace, _ := s.resolveWorkspace(r)
+			if workspace == nil {
+				if s.strict {
+					http.Error(w, "workspace required", http.StatusUnauthorized)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(WithWorkspace(r.Context(), workspace)))
+		})
 	}
 }
 
@@ -52,9 +68,14 @@ func (s *WorkspaceScope) Middleware() func(http.Handler) http.Handler {
 //
 //	authGroup.Use(scope.Middleware(), scope.RequireWorkspace())
 func (s *WorkspaceScope) RequireWorkspace() func(http.Handler) http.Handler {
-	// TODO: implement
 	return func(next http.Handler) http.Handler {
-		return next
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, err := WorkspaceFromCtx(r.Context()); err != nil {
+				http.Error(w, "workspace required", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 
@@ -67,6 +88,64 @@ func (s *WorkspaceScope) RequireWorkspace() func(http.Handler) http.Handler {
 //	    return ten.Can(ctx, ws, "pages", 1).AsError()
 //	})
 func (s *WorkspaceScope) ScopeFunc(ctx context.Context, slug string, fn func(context.Context) error) error {
-	// TODO: implement — resolve workspace, inject, call fn
-	return ErrNoWorkspaceContext
+	if s == nil || s.tenant == nil {
+		return ErrNoWorkspaceContext
+	}
+	workspace, err := s.tenant.GetWorkspace(ctx, slug)
+	if err != nil {
+		return err
+	}
+	if workspace == nil {
+		return ErrNoWorkspaceContext
+	}
+	return fn(WithWorkspace(ctx, workspace))
+}
+
+func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
+	if s == nil || s.tenant == nil || r == nil {
+		return nil, ErrNoWorkspaceContext
+	}
+	if idValue := r.Header.Get("X-Workspace-ID"); idValue != "" {
+		if id, err := parseInt64(idValue); err == nil && s.tenant.cache != nil {
+			if workspace, ok := s.tenant.cache.GetWorkspaceByID(id); ok {
+				return workspace, nil
+			}
+		}
+	}
+	if slug := r.Header.Get("X-Workspace-Slug"); slug != "" {
+		return s.tenant.GetWorkspace(r.Context(), slug)
+	}
+	if host := cleanHost(r.Host); host != "" {
+		if workspace, err := s.tenant.GetWorkspaceBySubdomain(r.Context(), host); err == nil && workspace != nil {
+			return workspace, nil
+		}
+	}
+	if slug := r.URL.Query().Get("workspace"); slug != "" {
+		return s.tenant.GetWorkspace(r.Context(), slug)
+	}
+	return nil, ErrNoWorkspaceContext
+}
+
+func cleanHost(host string) string {
+	if host == "" {
+		return ""
+	}
+	if parsed, err := netip.ParseAddrPort(host); err == nil {
+		return parsed.Addr().String()
+	}
+	if colon := strings.LastIndex(host, ":"); colon > 0 {
+		return host[:colon]
+	}
+	return host
+}
+
+func parseInt64(value string) (int64, error) {
+	var result int64
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return 0, ErrNoWorkspaceContext
+		}
+		result = result*10 + int64(r-'0')
+	}
+	return result, nil
 }

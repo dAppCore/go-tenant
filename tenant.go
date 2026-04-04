@@ -41,46 +41,116 @@ type TenantOptions struct {
 //
 //	core.New(core.WithService(tenant.Register))
 func Register() {
-	// TODO: implement — create Tenant, wire client + cache + entitlements
+	// Core integration is not wired in this checkout.
 }
 
 // GetWorkspace resolves a workspace by slug. Checks cache first, then PHP API.
 //
 //	ws, err := ten.GetWorkspace(ctx, "acme")
 func (t *Tenant) GetWorkspace(ctx context.Context, slug string) (*Workspace, error) {
-	// TODO: implement
-	return nil, ErrWorkspaceNotFound
+	if t == nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	if t.cache != nil {
+		if workspace, ok := t.cache.GetWorkspaceBySlug(slug); ok {
+			return workspace, nil
+		}
+	}
+	if t.client == nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	workspace, err := t.client.GetWorkspaceBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	if t.cache != nil {
+		_ = t.cache.SetWorkspace(workspace)
+	}
+	return workspace, nil
 }
 
 // GetWorkspaceByUUID resolves a workspace by UUID.
 //
 //	ws, err := ten.GetWorkspaceByUUID(ctx, "550e8400-...")
 func (t *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspace, error) {
-	// TODO: implement
-	return nil, ErrWorkspaceNotFound
+	if t == nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	if t.cache != nil {
+		if workspace, ok := t.cache.GetWorkspace(uuid); ok {
+			return workspace, nil
+		}
+	}
+	if t.client == nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	workspace, err := t.client.GetWorkspaceByUUID(ctx, uuid)
+	if err != nil {
+		return nil, err
+	}
+	if t.cache != nil {
+		_ = t.cache.SetWorkspace(workspace)
+	}
+	return workspace, nil
 }
 
 // GetWorkspaceBySubdomain resolves the workspace for an incoming hostname.
 //
 //	ws, err := ten.GetWorkspaceBySubdomain(ctx, r.Host)
 func (t *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
-	// TODO: implement
-	return nil, ErrWorkspaceNotFound
+	if t == nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	slug := host
+	if dot := indexRune(host, '.'); dot > 0 {
+		slug = host[:dot]
+	}
+	if slug != "" {
+		if workspace, err := t.GetWorkspace(ctx, slug); err == nil {
+			return workspace, nil
+		}
+	}
+	if t.client == nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	workspace, err := t.client.GetWorkspaceBySubdomain(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	if t.cache != nil {
+		_ = t.cache.SetWorkspace(workspace)
+	}
+	return workspace, nil
 }
 
 // Can checks whether ws can consume quantity units of featureCode.
 //
 //	result := ten.Can(ctx, ws, "pages", 1)
 func (t *Tenant) Can(ctx context.Context, ws *Workspace, featureCode string, quantity int) EntitlementResult {
-	// TODO: implement — delegate to t.entitlements.Can
-	return Deny(featureCode, "not implemented", nil, nil)
+	if t == nil {
+		return Deny(featureCode, "tenant not configured", nil, nil)
+	}
+	if t.entitlements == nil {
+		t.entitlements = NewLocalEntitlementService(t.cache, t.client)
+	}
+	return t.entitlements.Can(ctx, ws, featureCode, quantity)
 }
 
 // RecordUsage records feature consumption for ws after a successful operation.
 //
 //	ten.RecordUsage(ctx, ws, "pages", 1, &userID, nil)
 func (t *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
-	// TODO: implement — delegate to t.entitlements.RecordUsage, then CheckUsageAlerts
+	if t == nil {
+		return ErrNoWorkspaceContext
+	}
+	if t.entitlements == nil {
+		t.entitlements = NewLocalEntitlementService(t.cache, t.client)
+	}
+	if err := t.entitlements.RecordUsage(ctx, ws, featureCode, quantity, userID, metadata); err != nil {
+		return err
+	}
+	result := t.Can(ctx, ws, featureCode, quantity)
+	t.CheckUsageAlerts(ws, featureCode, result)
 	return nil
 }
 
@@ -88,15 +158,28 @@ func (t *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode str
 //
 //	items, err := ten.GetUsageSummary(ctx, ws)
 func (t *Tenant) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error) {
-	// TODO: implement
-	return nil, nil
+	if t == nil {
+		return nil, ErrNoWorkspaceContext
+	}
+	if t.entitlements == nil {
+		t.entitlements = NewLocalEntitlementService(t.cache, t.client)
+	}
+	return t.entitlements.GetUsageSummary(ctx, ws)
 }
 
 // InvalidateWorkspace drops the local cache for ws.
 //
 //	ten.InvalidateWorkspace(ws.UUID)
 func (t *Tenant) InvalidateWorkspace(wsUUID string) {
-	// TODO: implement — delegate to t.entitlements.InvalidateWorkspace
+	if t == nil {
+		return
+	}
+	if t.entitlements != nil {
+		t.entitlements.InvalidateWorkspace(wsUUID)
+	}
+	if t.cache != nil {
+		_ = t.cache.InvalidateWorkspace(wsUUID)
+	}
 }
 
 // OnUsageAlert registers a handler invoked when a usage threshold is crossed.
@@ -120,5 +203,39 @@ func (t *Tenant) Scope() *WorkspaceScope {
 //
 //	ten.CheckUsageAlerts(ws, "pages", result)
 func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result EntitlementResult) {
-	// TODO: implement — check thresholds 80/90/100, fire handlers
+	if t == nil || ws == nil || !result.Allowed || result.Limit == nil || result.Used == nil {
+		return
+	}
+	pct := result.UsagePercent()
+	if pct == nil {
+		return
+	}
+	now := time.Now()
+	percentage := *pct
+	for _, threshold := range []int{AlertThresholdWarning, AlertThresholdCritical, AlertThresholdLimit} {
+		if percentage < float64(threshold) {
+			continue
+		}
+		alert := UsageAlert{
+			WorkspaceUUID: ws.UUID,
+			FeatureCode:   featureCode,
+			Threshold:     threshold,
+			Used:          *result.Used,
+			Limit:         *result.Limit,
+			Percentage:    percentage,
+			TriggeredAt:   now,
+		}
+		for _, handler := range t.alertHandlers {
+			handler(alert)
+		}
+	}
+}
+
+func indexRune(value string, target rune) int {
+	for i, r := range value {
+		if r == target {
+			return i
+		}
+	}
+	return -1
 }

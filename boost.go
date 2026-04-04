@@ -25,9 +25,9 @@ type Boost struct {
 type BoostType string
 
 const (
-	BoostTypeAddLimit  BoostType = "add_limit"  // adds N to the package limit
-	BoostTypeEnable    BoostType = "enable"      // enables a boolean feature
-	BoostTypeUnlimited BoostType = "unlimited"   // removes the cap entirely
+	BoostTypeAddLimit  BoostType = "add_limit" // adds N to the package limit
+	BoostTypeEnable    BoostType = "enable"    // enables a boolean feature
+	BoostTypeUnlimited BoostType = "unlimited" // removes the cap entirely
 )
 
 // BoostStatus reflects the current lifecycle state.
@@ -44,8 +44,19 @@ const (
 //
 //	for _, b := range boosts { if b.IsUsable() { effectiveLimit += b.Remaining() } }
 func (b Boost) IsUsable() bool {
-	// TODO: implement — check status, expiry, and consumed quantity
-	return false
+	if b.Status != BoostStatusActive {
+		return false
+	}
+	if b.StartsAt != nil && time.Now().Before(*b.StartsAt) {
+		return false
+	}
+	if b.ExpiresAt != nil && time.Now().After(*b.ExpiresAt) {
+		return false
+	}
+	if b.BoostType == BoostTypeAddLimit && b.Remaining() <= 0 {
+		return false
+	}
+	return true
 }
 
 // Remaining returns the unconsumed portion of an add_limit boost.
@@ -53,6 +64,19 @@ func (b Boost) IsUsable() bool {
 //
 //	remaining := boost.Remaining()  // 7 if limit_value=10 consumed=3
 func (b Boost) Remaining() int {
-	// TODO: implement
-	return 0
+	switch b.BoostType {
+	case BoostTypeUnlimited:
+		return -1
+	case BoostTypeEnable:
+		if b.Status == BoostStatusActive && b.IsUsable() {
+			return 1
+		}
+		return 0
+	default:
+		remaining := b.LimitValue - b.ConsumedQuantity
+		if remaining < 0 {
+			return 0
+		}
+		return remaining
+	}
 }

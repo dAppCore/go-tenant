@@ -42,14 +42,39 @@ const (
 //	ws, err := tenant.WorkspaceFromCtx(ctx)
 //	if err != nil { return core.E("tenant", "no workspace context", err) }
 func WorkspaceFromCtx(ctx context.Context) (*Workspace, error) {
-	// TODO: implement
-	return nil, ErrNoWorkspaceContext
+	if ctx == nil {
+		return nil, ErrNoWorkspaceContext
+	}
+	ws, _ := ctx.Value(workspaceContextKey).(*Workspace)
+	if ws == nil {
+		return nil, ErrNoWorkspaceContext
+	}
+	return ws, nil
 }
 
 // WithWorkspace returns a new context carrying the workspace.
 //
 //	ctx = tenant.WithWorkspace(ctx, ws)
 func WithWorkspace(ctx context.Context, ws *Workspace) context.Context {
-	// TODO: implement
-	return ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ws == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, workspaceContextKey, ws)
+}
+
+func cloneWorkspace(ws *Workspace) *Workspace {
+	if ws == nil {
+		return nil
+	}
+	clone := *ws
+	if ws.Settings != nil {
+		clone.Settings = make(map[string]any, len(ws.Settings))
+		for key, value := range ws.Settings {
+			clone.Settings[key] = value
+		}
+	}
+	return &clone
 }
