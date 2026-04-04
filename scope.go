@@ -5,9 +5,6 @@ package tenant
 import (
 	"context"
 	"net/http"
-	"net/netip"
-
-	"dappco.re/go/core"
 )
 
 // WorkspaceScope resolves and injects workspace context for HTTP handlers.
@@ -120,8 +117,8 @@ func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
 	if slug := r.Header.Get("X-Workspace-Slug"); slug != "" {
 		return s.tenant.GetWorkspace(r.Context(), slug)
 	}
-	if host := cleanHost(r.Host); host != "" {
-		if workspace, err := s.tenant.GetWorkspaceBySubdomain(r.Context(), host); err == nil && workspace != nil {
+	if r.Host != "" {
+		if workspace, err := s.tenant.GetWorkspaceBySubdomain(r.Context(), r.Host); err == nil && workspace != nil {
 			return workspace, nil
 		}
 	}
@@ -129,20 +126,6 @@ func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
 		return s.tenant.GetWorkspace(r.Context(), slug)
 	}
 	return nil, ErrNoWorkspaceContext
-}
-
-func cleanHost(host string) string {
-	if host == "" {
-		return ""
-	}
-	if parsed, err := netip.ParseAddrPort(host); err == nil {
-		return parsed.Addr().String()
-	}
-	parts := core.Split(host, ":")
-	if len(parts) > 1 {
-		return parts[0]
-	}
-	return host
 }
 
 func parseInt64(value string) (int64, error) {

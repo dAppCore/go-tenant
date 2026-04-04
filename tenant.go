@@ -220,10 +220,7 @@ func (t *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Wor
 	if t == nil {
 		return nil, ErrWorkspaceNotFound
 	}
-	slug := host
-	if dot := indexRune(host, '.'); dot > 0 {
-		slug = host[:dot]
-	}
+	slug := workspaceSlugFromHost(host)
 	if slug != "" {
 		if workspace, err := t.GetWorkspace(ctx, slug); err == nil {
 			return workspace, nil
@@ -387,15 +384,6 @@ func (t *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string, result Enti
 			}()
 		}
 	}
-}
-
-func indexRune(value string, target rune) int {
-	for i, r := range value {
-		if r == target {
-			return i
-		}
-	}
-	return -1
 }
 
 func alertStateKey(wsUUID, featureCode string) string {
