@@ -111,6 +111,10 @@ func WithWorkspace(ctx context.Context, ws *Workspace) context.Context {
 	return context.WithValue(ctx, workspaceContextKey, ws)
 }
 
+// cloneWorkspace returns a deep copy of the workspace to prevent cache mutation.
+// Settings map is copied so modifications to the clone do not affect the original.
+//
+//	safe := cloneWorkspace(cachedWorkspace)
 func cloneWorkspace(ws *Workspace) *Workspace {
 	if ws == nil {
 		return nil

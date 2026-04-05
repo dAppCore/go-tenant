@@ -147,6 +147,11 @@ type localEntitlementService struct {
 	client *TenantClient
 }
 
+// featureLimitSnapshot holds the aggregated limit for a feature across all packages.
+//
+//	snapshot := packageLimitForFeature(packages, "pages")
+//	if snapshot.Unlimited { return AllowUnlimited("pages") }
+//	if !snapshot.HasFeatureAssignment { return Deny("pages", "not in package", nil, nil) }
 type featureLimitSnapshot struct {
 	Limit                int
 	HasFeatureAssignment bool
@@ -446,6 +451,11 @@ func (entitlementService *localEntitlementService) loadUsageCount(ctx context.Co
 	return &used
 }
 
+// packageLimitForFeature aggregates the effective limit from all packages for a feature.
+// Non-stackable packages use the highest limit; stackable packages are summed on top.
+//
+//	snapshot := packageLimitForFeature(packages, "pages")
+//	if snapshot.Unlimited { return AllowUnlimited(code) }
 func packageLimitForFeature(packages []Package, featureCode string) featureLimitSnapshot {
 	featureCode = normalizedFeatureCode(featureCode)
 	snapshot := featureLimitSnapshot{}

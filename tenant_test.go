@@ -4,7 +4,6 @@ package tenant
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -66,7 +65,7 @@ func TestEntitlementResult_AsError_Good(t *testing.T) {
 
 func TestEntitlementResult_AsError_Bad(t *testing.T) {
 	err := Deny("pages", "limit reached", intPtr(10), intPtr(10)).AsError()
-	if err == nil || !errors.Is(err, ErrEntitlementDenied) {
+	if err == nil || !core.Is(err, ErrEntitlementDenied) {
 		t.Fatalf("expected ErrEntitlementDenied, got %v", err)
 	}
 }
@@ -224,14 +223,14 @@ func TestTenantCache_SetUser_Good(t *testing.T) {
 
 func TestTenantCache_SetUser_Bad(t *testing.T) {
 	cache := NewTenantCache(nil)
-	if err := cache.SetUser(nil); !errors.Is(err, ErrNoUserContext) {
+	if err := cache.SetUser(nil); !core.Is(err, ErrNoUserContext) {
 		t.Fatalf("expected ErrNoUserContext, got %v", err)
 	}
 }
 
 func TestTenantCache_SetUser_Ugly(t *testing.T) {
 	cache := NewTenantCache(nil)
-	if err := cache.SetUser(&User{Name: "Ada"}); !errors.Is(err, ErrNoUserContext) {
+	if err := cache.SetUser(&User{Name: "Ada"}); !core.Is(err, ErrNoUserContext) {
 		t.Fatalf("expected ErrNoUserContext for missing UUID, got %v", err)
 	}
 	if got, ok := cache.GetUser("missing"); ok || got != nil {
@@ -256,13 +255,13 @@ func TestTenantCache_NilReceiver_Good(t *testing.T) {
 func TestTenantCache_NilReceiver_Bad(t *testing.T) {
 	var cache *TenantCache
 
-	if err := cache.SetWorkspace(&Workspace{UUID: "uuid-7"}); !errors.Is(err, ErrNoWorkspaceContext) {
+	if err := cache.SetWorkspace(&Workspace{UUID: "uuid-7"}); !core.Is(err, ErrNoWorkspaceContext) {
 		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
 	}
-	if err := cache.SetFeature(&Feature{Code: "pages"}); !errors.Is(err, ErrFeatureNotFound) {
+	if err := cache.SetFeature(&Feature{Code: "pages"}); !core.Is(err, ErrFeatureNotFound) {
 		t.Fatalf("expected ErrFeatureNotFound, got %v", err)
 	}
-	if err := cache.SetUser(&User{UUID: "user-7"}); !errors.Is(err, ErrNoUserContext) {
+	if err := cache.SetUser(&User{UUID: "user-7"}); !core.Is(err, ErrNoUserContext) {
 		t.Fatalf("expected ErrNoUserContext, got %v", err)
 	}
 }
@@ -583,7 +582,7 @@ func TestTenant_RecordUsage_Good(t *testing.T) {
 
 func TestTenant_RecordUsage_Bad(t *testing.T) {
 	tenant := &Tenant{}
-	if err := tenant.RecordUsage(context.Background(), nil, "pages", 1, nil, nil); !errors.Is(err, ErrNoWorkspaceContext) {
+	if err := tenant.RecordUsage(context.Background(), nil, "pages", 1, nil, nil); !core.Is(err, ErrNoWorkspaceContext) {
 		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
 	}
 }
@@ -781,14 +780,14 @@ func TestTenant_GetWorkspaceByID_RemoteGood(t *testing.T) {
 
 func TestTenant_GetWorkspaceByID_Bad(t *testing.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
-	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !errors.Is(err, ErrWorkspaceNotFound) {
+	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !core.Is(err, ErrWorkspaceNotFound) {
 		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
 	}
 }
 
 func TestTenant_GetWorkspaceByID_Ugly(t *testing.T) {
 	var tenant *Tenant
-	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !errors.Is(err, ErrWorkspaceNotFound) {
+	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !core.Is(err, ErrWorkspaceNotFound) {
 		t.Fatalf("expected ErrWorkspaceNotFound for nil tenant, got %v", err)
 	}
 }
@@ -813,7 +812,7 @@ func TestTenant_GetUser_Good(t *testing.T) {
 
 func TestTenant_GetUser_Bad(t *testing.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
-	if _, err := tenant.GetUser(context.Background()); !errors.Is(err, ErrNoUserContext) {
+	if _, err := tenant.GetUser(context.Background()); !core.Is(err, ErrNoUserContext) {
 		t.Fatalf("expected ErrNoUserContext, got %v", err)
 	}
 }
@@ -923,7 +922,7 @@ func TestTenantClient_GetWorkspaceBySubdomain_Bad(t *testing.T) {
 	defer server.Close()
 
 	client := NewTenantClient(server.URL, "token")
-	if _, err := client.GetWorkspaceBySubdomain(context.Background(), "missing.host.uk.com"); !errors.Is(err, ErrWorkspaceNotFound) {
+	if _, err := client.GetWorkspaceBySubdomain(context.Background(), "missing.host.uk.com"); !core.Is(err, ErrWorkspaceNotFound) {
 		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
 	}
 }
@@ -1172,7 +1171,7 @@ func TestWorkspaceScope_ScopeFunc_Bad(t *testing.T) {
 	scope := NewWorkspaceScope(&Tenant{cache: NewTenantCache(nil)})
 	if err := scope.ScopeFunc(context.Background(), "missing", func(ctx context.Context) error {
 		return nil
-	}); !errors.Is(err, ErrNoWorkspaceContext) {
+	}); !core.Is(err, ErrNoWorkspaceContext) {
 		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
 	}
 }
@@ -1188,7 +1187,7 @@ func TestWorkspaceScope_ScopeFunc_Ugly(t *testing.T) {
 	expected := core.E("tenant.scope", "callback failed", nil)
 	if err := scope.ScopeFunc(context.Background(), "acme", func(ctx context.Context) error {
 		return expected
-	}); !errors.Is(err, expected) {
+	}); !core.Is(err, expected) {
 		t.Fatalf("expected callback error, got %v", err)
 	}
 }
@@ -1206,7 +1205,7 @@ func TestWorkspaceContext_Good(t *testing.T) {
 }
 
 func TestWorkspaceContext_Bad(t *testing.T) {
-	if _, err := WorkspaceFromCtx(context.Background()); !errors.Is(err, ErrNoWorkspaceContext) {
+	if _, err := WorkspaceFromCtx(context.Background()); !core.Is(err, ErrNoWorkspaceContext) {
 		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
 	}
 }
@@ -1244,10 +1243,10 @@ func TestWorkspaceContextHolder_Good(t *testing.T) {
 
 func TestWorkspaceContextHolder_Bad(t *testing.T) {
 	holder := WorkspaceContext{}
-	if _, err := holder.Workspace(); !errors.Is(err, ErrNoWorkspaceContext) {
+	if _, err := holder.Workspace(); !core.Is(err, ErrNoWorkspaceContext) {
 		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
 	}
-	if _, err := holder.User(); !errors.Is(err, ErrNoUserContext) {
+	if _, err := holder.User(); !core.Is(err, ErrNoUserContext) {
 		t.Fatalf("expected ErrNoUserContext, got %v", err)
 	}
 }

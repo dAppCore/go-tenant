@@ -38,6 +38,10 @@ func (p Package) GetFeatureLimit(featureCode string) *int {
 	return nil
 }
 
+// includesFeature checks whether this package has any assignment for featureCode,
+// regardless of the limit value.
+//
+//	pkg.includesFeature("pages")  // true if "pages" is in pkg.Features
 func (p Package) includesFeature(featureCode string) bool {
 	featureCode = normalizedFeatureCode(featureCode)
 	for _, feature := range p.Features {

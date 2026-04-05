@@ -63,6 +63,9 @@ func (r UsageRecord) payload() map[string]any {
 	return payload
 }
 
+// cloneInt64 returns a copy of the pointer to prevent shared mutation.
+//
+//	safe := cloneInt64(&userID)
 func cloneInt64(value *int64) *int64 {
 	if value == nil {
 		return nil
@@ -71,6 +74,9 @@ func cloneInt64(value *int64) *int64 {
 	return &clone
 }
 
+// cloneMetadata returns a shallow copy of the metadata map to prevent shared mutation.
+//
+//	safe := cloneMetadata(map[string]any{"page_id": 42})
 func cloneMetadata(metadata map[string]any) map[string]any {
 	if metadata == nil {
 		return nil
@@ -85,7 +91,7 @@ func cloneMetadata(metadata map[string]any) map[string]any {
 // UsageSummaryItem is one row in the usage summary dashboard.
 //
 //	summary, _ := svc.GetUsageSummary(ctx, ws)
-//	for _, item := range summary { fmt.Printf("%s: %d/%d\n", item.FeatureCode, item.Used, item.Limit) }
+//	for _, item := range summary { core.Println(item.FeatureCode, *item.Used, "/", *item.Limit) }
 type UsageSummaryItem struct {
 	FeatureCode string
 	FeatureName string

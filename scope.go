@@ -128,6 +128,11 @@ func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
 	return nil, ErrNoWorkspaceContext
 }
 
+// parseInt64 parses a decimal string to int64 without importing strconv.
+// Only accepts digit characters — no signs, whitespace, or other formatting.
+//
+//	parseInt64("42")     // 42, nil
+//	parseInt64("bogus")  // 0, ErrNoWorkspaceContext
 func parseInt64(value string) (int64, error) {
 	var result int64
 	for _, r := range value {

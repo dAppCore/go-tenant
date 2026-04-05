@@ -128,6 +128,11 @@ func (c *TenantClient) statusError(status int, path, body string) error {
 	return core.E("tenant", http.StatusText(status), nil)
 }
 
+// decodeEnvelope decodes a PHP API response, handling both envelope and direct JSON formats.
+// Envelope format: {"ok": true, "data": ...} or {"ok": false, "error": "message"}.
+//
+//	var workspace Workspace
+//	decodeEnvelope(responseBytes, &workspace)
 func decodeEnvelope(data []byte, target any) error {
 	if len(data) == 0 {
 		return io.EOF
@@ -156,6 +161,11 @@ func decodeEnvelope(data []byte, target any) error {
 	return core.E("tenant", "invalid api payload", nil)
 }
 
+// decodeCount extracts a numeric count from a PHP API response.
+// Supports envelope format ({"count": N}), direct integer, and string representations.
+//
+//	count, err := decodeCount([]byte(`{"ok":true,"count":7}`))  // 7, nil
+//	count, err := decodeCount([]byte(`42`))                     // 42, nil
 func decodeCount(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, io.EOF
@@ -354,6 +364,11 @@ func (c *TenantClient) GetFeature(ctx context.Context, code string) (*Feature, e
 	return &feature, nil
 }
 
+// workspaceSlugFromHost extracts the subdomain slug from a hostname.
+//
+//	workspaceSlugFromHost("acme.host.uk.com")  // "acme"
+//	workspaceSlugFromHost("localhost")          // "localhost"
+//	workspaceSlugFromHost("")                   // ""
 func workspaceSlugFromHost(host string) string {
 	host = core.Lower(core.Trim(host))
 	if host == "" {
@@ -369,6 +384,10 @@ func workspaceSlugFromHost(host string) string {
 	return host
 }
 
+// looksLikeEnvelope checks whether a decoded JSON map has API envelope structure.
+//
+//	looksLikeEnvelope(map[string]any{"ok": true, "data": ws})  // true
+//	looksLikeEnvelope(map[string]any{"slug": "acme"})          // false
 func looksLikeEnvelope(fields map[string]any) bool {
 	if len(fields) == 0 {
 		return false
@@ -379,6 +398,10 @@ func looksLikeEnvelope(fields map[string]any) bool {
 	return hasOK || hasError || hasData
 }
 
+// stringField extracts a string value from a decoded JSON map.
+//
+//	stringField(map[string]any{"error": "not found"}, "error")  // "not found"
+//	stringField(map[string]any{"error": 42}, "error")           // ""
 func stringField(fields map[string]any, key string) string {
 	value, ok := fields[key]
 	if !ok || value == nil {
@@ -390,6 +413,10 @@ func stringField(fields map[string]any, key string) string {
 	return ""
 }
 
+// boolField extracts a boolean value from a decoded JSON map.
+//
+//	boolField(map[string]any{"ok": true}, "ok")  // true
+//	boolField(map[string]any{"ok": "yes"}, "ok") // false
 func boolField(fields map[string]any, key string) bool {
 	value, ok := fields[key]
 	if !ok || value == nil {
@@ -399,6 +426,12 @@ func boolField(fields map[string]any, key string) bool {
 	return ok && typed
 }
 
+// intField extracts a numeric value from a decoded JSON map as int.
+// Handles int, float64, and string representations.
+//
+//	intField(map[string]any{"count": 7.0}, "count")   // 7, true
+//	intField(map[string]any{"count": "42"}, "count")  // 42, true
+//	intField(map[string]any{}, "count")               // 0, false
 func intField(fields map[string]any, key string) (int, bool) {
 	value, ok := fields[key]
 	if !ok || value == nil {

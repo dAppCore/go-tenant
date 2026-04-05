@@ -66,6 +66,9 @@ func NewTenantCache(st *store.Store) *TenantCache {
 	}
 }
 
+// persistJSON writes a JSON-serialised value to go-store with the given TTL.
+//
+//	c.persistJSON("ws:uuid-7:record", "data", workspace, TTLWorkspace)
 func (c *TenantCache) persistJSON(group, key string, value any, ttl time.Duration) error {
 	if c == nil || c.store == nil {
 		return nil
@@ -73,6 +76,9 @@ func (c *TenantCache) persistJSON(group, key string, value any, ttl time.Duratio
 	return c.store.SetWithTTL(group, key, core.JSONMarshalString(value), ttl)
 }
 
+// persistString writes a plain string value to go-store with the given TTL.
+//
+//	c.persistString("ws:slug:acme", "uuid", "uuid-7", TTLWorkspace)
 func (c *TenantCache) persistString(group, key, value string, ttl time.Duration) error {
 	if c == nil || c.store == nil {
 		return nil
@@ -80,6 +86,10 @@ func (c *TenantCache) persistString(group, key, value string, ttl time.Duration)
 	return c.store.SetWithTTL(group, key, value, ttl)
 }
 
+// readJSON reads and deserialises a JSON value from go-store.
+//
+//	var workspace Workspace
+//	ok := c.readJSON("ws:uuid-7:record", "data", &workspace)
 func (c *TenantCache) readJSON(group, key string, target any) bool {
 	if c == nil || c.store == nil {
 		return false
@@ -91,6 +101,9 @@ func (c *TenantCache) readJSON(group, key string, target any) bool {
 	return core.JSONUnmarshalString(value, target).OK
 }
 
+// readString reads a plain string value from go-store.
+//
+//	uuid, ok := c.readString("ws:slug:acme", "uuid")
 func (c *TenantCache) readString(group, key string) (string, bool) {
 	if c == nil || c.store == nil {
 		return "", false
@@ -102,6 +115,9 @@ func (c *TenantCache) readString(group, key string) (string, bool) {
 	return value, true
 }
 
+// deleteStoreGroup removes all entries in a go-store group.
+//
+//	c.deleteStoreGroup("ws:uuid-7:record")
 func (c *TenantCache) deleteStoreGroup(group string) {
 	if c == nil || c.store == nil {
 		return
@@ -109,6 +125,9 @@ func (c *TenantCache) deleteStoreGroup(group string) {
 	_ = c.store.DeleteGroup(group)
 }
 
+// deleteStorePrefix removes all entries whose group starts with the given prefix.
+//
+//	c.deleteStorePrefix("ws:uuid-7:usage:")
 func (c *TenantCache) deleteStorePrefix(prefix string) {
 	if c == nil || c.store == nil {
 		return
@@ -120,6 +139,9 @@ func (c *TenantCache) now() time.Time {
 	return time.Now()
 }
 
+// clonePackages returns a shallow copy of the package slice to prevent cache mutation.
+//
+//	safe := clonePackages(cachedPackages)
 func clonePackages(packages []Package) []Package {
 	if packages == nil {
 		return nil
@@ -129,6 +151,9 @@ func clonePackages(packages []Package) []Package {
 	return clone
 }
 
+// cloneBoosts returns a shallow copy of the boost slice to prevent cache mutation.
+//
+//	safe := cloneBoosts(cachedBoosts)
 func cloneBoosts(boosts []Boost) []Boost {
 	if boosts == nil {
 		return nil
@@ -138,6 +163,9 @@ func cloneBoosts(boosts []Boost) []Boost {
 	return clone
 }
 
+// cloneFeature returns a copy of the feature to prevent cache mutation.
+//
+//	safe := cloneFeature(cachedFeature)
 func cloneFeature(feature *Feature) *Feature {
 	if feature == nil {
 		return nil
@@ -146,6 +174,9 @@ func cloneFeature(feature *Feature) *Feature {
 	return &clone
 }
 
+// cloneUser returns a copy of the user to prevent cache mutation.
+//
+//	safe := cloneUser(cachedUser)
 func cloneUser(user *User) *User {
 	if user == nil {
 		return nil
@@ -553,10 +584,17 @@ func (c *TenantCache) GetUser(uuid string) (*User, bool) {
 	return cloneUser(user), true
 }
 
+// usageCacheKey builds the in-memory cache key for a workspace+feature usage counter.
+//
+//	usageCacheKey("uuid-7", "pages")  // "uuid-7\x00pages"
 func usageCacheKey(wsUUID, featureCode string) string {
 	return wsUUID + "\x00" + normalizedFeatureCode(featureCode)
 }
 
+// hasUsagePrefix checks whether a cache key belongs to the given workspace UUID.
+//
+//	hasUsagePrefix("uuid-7\x00pages", "uuid-7")  // true
+//	hasUsagePrefix("uuid-9\x00pages", "uuid-7")  // false
 func hasUsagePrefix(key, wsUUID string) bool {
 	if len(key) < len(wsUUID)+1 {
 		return false
@@ -564,38 +602,65 @@ func hasUsagePrefix(key, wsUUID string) bool {
 	return key[:len(wsUUID)] == wsUUID && key[len(wsUUID)] == '\x00'
 }
 
+// workspaceRecordGroup returns the go-store group key for a workspace record.
+//
+//	workspaceRecordGroup("uuid-7")  // "ws:uuid-7:record"
 func workspaceRecordGroup(wsUUID string) string {
 	return "ws:" + wsUUID + ":record"
 }
 
+// workspaceSlugGroup returns the go-store group key for a slug-to-UUID mapping.
+//
+//	workspaceSlugGroup("acme")  // "ws:slug:acme"
 func workspaceSlugGroup(slug string) string {
 	return "ws:slug:" + slug
 }
 
+// workspaceIDGroup returns the go-store group key for an ID-to-UUID mapping.
+//
+//	workspaceIDGroup(42)  // "ws:id:42"
 func workspaceIDGroup(id int64) string {
 	return "ws:id:" + strconv.FormatInt(id, 10)
 }
 
+// packagesGroup returns the go-store group key for a workspace's packages.
+//
+//	packagesGroup("uuid-7")  // "ws:uuid-7:packages"
 func packagesGroup(wsUUID string) string {
 	return "ws:" + wsUUID + ":packages"
 }
 
+// boostsGroup returns the go-store group key for a workspace's boosts.
+//
+//	boostsGroup("uuid-7")  // "ws:uuid-7:boosts"
 func boostsGroup(wsUUID string) string {
 	return "ws:" + wsUUID + ":boosts"
 }
 
+// usageGroup returns the go-store group key for a workspace+feature usage counter.
+//
+//	usageGroup("uuid-7", "pages")  // "ws:uuid-7:usage:pages"
 func usageGroup(wsUUID, featureCode string) string {
 	return "ws:" + wsUUID + ":usage:" + featureCode
 }
 
+// usagePrefix returns the go-store prefix for all usage entries of a workspace.
+//
+//	usagePrefix("uuid-7")  // "ws:uuid-7:usage:"
 func usagePrefix(wsUUID string) string {
 	return "ws:" + wsUUID + ":usage:"
 }
 
+// featureGroup returns the go-store group key for a feature definition.
+//
+//	featureGroup("pages")  // "feature:pages"
 func featureGroup(code string) string {
 	return "feature:" + normalizedFeatureCode(code)
 }
 
+// userGroup returns the go-store group key for a user record.
+//
+//	userGroup("user-7")  // "user:user-7"
 func userGroup(uuid string) string {
 	return "user:" + uuid
 }

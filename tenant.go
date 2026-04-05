@@ -72,6 +72,9 @@ func Register(c *core.Core) core.Result {
 	return core.Result{Value: service, OK: true}
 }
 
+// tenantOptionsFromCoreConfig reads tenant configuration from Core's config system.
+//
+//	opts := tenantOptionsFromCoreConfig(c)  // reads "api_url", "api_token", "timeout"
 func tenantOptionsFromCoreConfig(c *core.Core) TenantOptions {
 	options := TenantOptions{Timeout: 10 * time.Second}
 	if c == nil || c.Config() == nil {
@@ -85,6 +88,9 @@ func tenantOptionsFromCoreConfig(c *core.Core) TenantOptions {
 	return options
 }
 
+// coreConfigStringValue reads the first non-empty string from the given config keys.
+//
+//	coreConfigStringValue(c, "api_url", "tenant.api_url")  // "https://api.host.uk.com"
 func coreConfigStringValue(c *core.Core, keys ...string) string {
 	if c == nil || c.Config() == nil {
 		return ""
@@ -97,6 +103,10 @@ func coreConfigStringValue(c *core.Core, keys ...string) string {
 	return ""
 }
 
+// coreConfigDurationValue reads a duration from the first matching config key.
+// Accepts time.Duration, string ("5s"), int, int64, and float64 (seconds).
+//
+//	coreConfigDurationValue(c, "timeout", "tenant.timeout")  // 10 * time.Second
 func coreConfigDurationValue(c *core.Core, keys ...string) time.Duration {
 	if c == nil || c.Config() == nil {
 		return 0
@@ -402,10 +412,17 @@ func (tenantService *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string,
 	}
 }
 
+// alertStateKey builds the tracking key for usage alert deduplication.
+//
+//	alertStateKey("uuid-7", "pages")  // "uuid-7\x00pages"
 func alertStateKey(wsUUID, featureCode string) string {
 	return wsUUID + "\x00" + normalizedFeatureCode(featureCode)
 }
 
+// hasAlertPrefix checks whether an alert state key belongs to the given workspace UUID.
+//
+//	hasAlertPrefix("uuid-7\x00pages", "uuid-7")  // true
+//	hasAlertPrefix("uuid-9\x00pages", "uuid-7")  // false
 func hasAlertPrefix(key, wsUUID string) bool {
 	if len(key) < len(wsUUID)+1 {
 		return false

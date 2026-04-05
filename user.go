@@ -93,6 +93,9 @@ func WithUser(ctx context.Context, user *User) context.Context {
 	return context.WithValue(ctx, userContextKey, user)
 }
 
+// normalizedFeatureCode trims whitespace and lowercases a feature code for consistent lookup.
+//
+//	normalizedFeatureCode("  PaGeS  ")  // "pages"
 func normalizedFeatureCode(code string) string {
 	return core.Lower(core.Trim(code))
 }
