@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"dappco.re/go/core"
-	"dappco.re/go/core/store"
+	"dappco.re/go/store"
 )
 
 // TTL constants matching PHP's cache configuration.

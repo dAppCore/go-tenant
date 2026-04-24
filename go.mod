@@ -10,7 +10,7 @@ require (
 )
 
 require (
-	dappco.re/go/core/store v0.2.1
+	dappco.re/go/store v0.8.0-alpha.1
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"dappco.re/go/core"
-	"dappco.re/go/core/store"
+	"dappco.re/go/store"
 )
 
 func intPtr(value int) *int {
