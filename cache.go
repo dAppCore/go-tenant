@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"dappco.re/go/core"
+	"dappco.re/go"
 	"dappco.re/go/store"
 )
 
@@ -118,21 +118,21 @@ func (c *TenantCache) readString(group, key string) (string, bool) {
 // deleteStoreGroup removes all entries in a go-store group.
 //
 //	c.deleteStoreGroup("ws:uuid-7:record")
-func (c *TenantCache) deleteStoreGroup(group string) {
+func (c *TenantCache) deleteStoreGroup(group string) error {
 	if c == nil || c.store == nil {
-		return
+		return nil
 	}
-	_ = c.store.DeleteGroup(group)
+	return c.store.DeleteGroup(group)
 }
 
 // deleteStorePrefix removes all entries whose group starts with the given prefix.
 //
 //	c.deleteStorePrefix("ws:uuid-7:usage:")
-func (c *TenantCache) deleteStorePrefix(prefix string) {
+func (c *TenantCache) deleteStorePrefix(prefix string) error {
 	if c == nil || c.store == nil {
-		return
+		return nil
 	}
-	_ = c.store.DeletePrefix(prefix)
+	return c.store.DeletePrefix(prefix)
 }
 
 func (c *TenantCache) now() time.Time {
@@ -201,13 +201,17 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 	for id, uuid := range c.workspaceIDs {
 		if uuid == ws.UUID {
 			delete(c.workspaceIDs, id)
-			c.deleteStoreGroup(workspaceIDGroup(id))
+			if err := c.deleteStoreGroup(workspaceIDGroup(id)); err != nil {
+				return err
+			}
 		}
 	}
 	for slug, uuid := range c.workspaceSlugs {
 		if uuid == ws.UUID {
 			delete(c.workspaceSlugs, slug)
-			c.deleteStoreGroup(workspaceSlugGroup(slug))
+			if err := c.deleteStoreGroup(workspaceSlugGroup(slug)); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -249,7 +253,9 @@ func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
 		}
 		var workspace Workspace
 		if c.readJSON(workspaceRecordGroup(uuid), "data", &workspace) {
-			_ = c.SetWorkspace(&workspace)
+			if err := c.SetWorkspace(&workspace); err != nil {
+				return nil, false
+			}
 			return cloneWorkspace(&workspace), true
 		}
 		return nil, false
@@ -437,12 +443,12 @@ func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
 // invalidateUsage drops the cached usage counter for a workspace+feature pair.
 //
 //	c.invalidateUsage(ws.UUID, "pages")
-func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) {
+func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) error {
 	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	delete(c.usage, usageCacheKey(wsUUID, featureCode))
-	c.deleteStoreGroup(usageGroup(wsUUID, featureCode))
+	return c.deleteStoreGroup(usageGroup(wsUUID, featureCode))
 }
 
 // InvalidateWorkspace drops all cache entries for this workspace UUID.
@@ -458,10 +464,19 @@ func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
 	delete(c.workspacesByUUID, wsUUID)
 	delete(c.packages, wsUUID)
 	delete(c.boosts, wsUUID)
-	c.deleteStoreGroup(workspaceRecordGroup(wsUUID))
-	c.deleteStoreGroup(packagesGroup(wsUUID))
-	c.deleteStoreGroup(boostsGroup(wsUUID))
-	c.deleteStorePrefix(usagePrefix(wsUUID))
+	var firstErr error
+	if err := c.deleteStoreGroup(workspaceRecordGroup(wsUUID)); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	if err := c.deleteStoreGroup(packagesGroup(wsUUID)); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	if err := c.deleteStoreGroup(boostsGroup(wsUUID)); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	if err := c.deleteStorePrefix(usagePrefix(wsUUID)); err != nil && firstErr == nil {
+		firstErr = err
+	}
 
 	for key := range c.usage {
 		if hasUsagePrefix(key, wsUUID) {
@@ -471,16 +486,20 @@ func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
 	for id, uuid := range c.workspaceIDs {
 		if uuid == wsUUID {
 			delete(c.workspaceIDs, id)
-			c.deleteStoreGroup(workspaceIDGroup(id))
+			if err := c.deleteStoreGroup(workspaceIDGroup(id)); err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 	for slug, uuid := range c.workspaceSlugs {
 		if uuid == wsUUID {
 			delete(c.workspaceSlugs, slug)
-			c.deleteStoreGroup(workspaceSlugGroup(slug))
+			if err := c.deleteStoreGroup(workspaceSlugGroup(slug)); err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
-	return nil
+	return firstErr
 }
 
 // SetFeature stores a feature definition by code. Features are global.

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"dappco.re/go/core"
+	"dappco.re/go"
 )
 
 // TenantClient calls the PHP REST API to read and mutate tenant data.

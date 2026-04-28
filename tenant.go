@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"dappco.re/go/core"
+	"dappco.re/go"
 )
 
 // Tenant is the root service. Register once per application instance.
@@ -58,7 +58,7 @@ type TenantOptions struct {
 //	core.New(core.WithService(tenant.Register))
 func Register(c *core.Core) core.Result {
 	if c == nil {
-		return core.Result{Value: core.E("tenant", "core is nil", nil), OK: false}
+		return core.Fail(core.E("tenant", "core is nil", nil))
 	}
 	options := tenantOptionsFromCoreConfig(c)
 	service := &Tenant{
@@ -69,7 +69,7 @@ func Register(c *core.Core) core.Result {
 	}
 	service.cache = NewTenantCache(nil)
 	service.entitlements = NewLocalEntitlementService(service.cache, service.client)
-	return core.Result{Value: service, OK: true}
+	return core.Ok(service)
 }
 
 // tenantOptionsFromCoreConfig reads tenant configuration from Core's config system.
@@ -154,7 +154,9 @@ func (tenantService *Tenant) GetWorkspace(ctx context.Context, slug string) (*Wo
 		return nil, err
 	}
 	if tenantService.cache != nil {
-		_ = tenantService.cache.SetWorkspace(workspace)
+		if err := tenantService.cache.SetWorkspace(workspace); err != nil {
+			return nil, err
+		}
 	}
 	return workspace, nil
 }
@@ -179,7 +181,9 @@ func (tenantService *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string
 		return nil, err
 	}
 	if tenantService.cache != nil {
-		_ = tenantService.cache.SetWorkspace(workspace)
+		if err := tenantService.cache.SetWorkspace(workspace); err != nil {
+			return nil, err
+		}
 	}
 	return workspace, nil
 }
@@ -204,7 +208,9 @@ func (tenantService *Tenant) GetWorkspaceByID(ctx context.Context, id int64) (*W
 		return nil, err
 	}
 	if tenantService.cache != nil {
-		_ = tenantService.cache.SetWorkspace(workspace)
+		if err := tenantService.cache.SetWorkspace(workspace); err != nil {
+			return nil, err
+		}
 	}
 	return workspace, nil
 }
@@ -221,7 +227,9 @@ func (tenantService *Tenant) GetUser(ctx context.Context) (*User, error) {
 			if cached, ok := tenantService.cache.GetUser(user.UUID); ok {
 				return cached, nil
 			}
-			_ = tenantService.cache.SetUser(user)
+			if err := tenantService.cache.SetUser(user); err != nil {
+				return nil, err
+			}
 		}
 		return cloneUser(user), nil
 	}
@@ -233,7 +241,9 @@ func (tenantService *Tenant) GetUser(ctx context.Context) (*User, error) {
 		return nil, err
 	}
 	if tenantService.cache != nil {
-		_ = tenantService.cache.SetUser(user)
+		if err := tenantService.cache.SetUser(user); err != nil {
+			return nil, err
+		}
 	}
 	return user, nil
 }
@@ -259,7 +269,9 @@ func (tenantService *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host s
 		return nil, err
 	}
 	if tenantService.cache != nil {
-		_ = tenantService.cache.SetWorkspace(workspace)
+		if err := tenantService.cache.SetWorkspace(workspace); err != nil {
+			return nil, err
+		}
 	}
 	return workspace, nil
 }
@@ -319,7 +331,9 @@ func (tenantService *Tenant) InvalidateWorkspace(wsUUID string) {
 		tenantService.entitlements.InvalidateWorkspace(wsUUID)
 	}
 	if tenantService.cache != nil {
-		_ = tenantService.cache.InvalidateWorkspace(wsUUID)
+		if err := tenantService.cache.InvalidateWorkspace(wsUUID); err != nil {
+			return
+		}
 	}
 	tenantService.lock.Lock()
 	if len(tenantService.alertState) > 0 {
@@ -404,7 +418,9 @@ func (tenantService *Tenant) CheckUsageAlerts(ws *Workspace, featureCode string,
 		for _, handler := range handlers {
 			func() {
 				defer func() {
-					_ = recover()
+					if recovered := recover(); recovered != nil {
+						return
+					}
 				}()
 				handler(alert)
 			}()

@@ -249,11 +249,17 @@ func (entitlementService *localEntitlementService) RecordUsage(ctx context.Conte
 	}
 	if entitlementService.cache != nil {
 		if entitlementService.client != nil {
-			entitlementService.cache.invalidateUsage(ws.UUID, poolCode)
+			if err := entitlementService.cache.invalidateUsage(ws.UUID, poolCode); err != nil {
+				return err
+			}
 		} else if used, ok := entitlementService.cache.GetUsage(ws.UUID, poolCode); ok {
-			_ = entitlementService.cache.SetUsage(ws.UUID, poolCode, used+quantity)
+			if err := entitlementService.cache.SetUsage(ws.UUID, poolCode, used+quantity); err != nil {
+				return err
+			}
 		} else {
-			_ = entitlementService.cache.SetUsage(ws.UUID, poolCode, quantity)
+			if err := entitlementService.cache.SetUsage(ws.UUID, poolCode, quantity); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -310,7 +316,9 @@ func (entitlementService *localEntitlementService) GetUsageSummary(ctx context.C
 
 func (entitlementService *localEntitlementService) InvalidateWorkspace(wsUUID string) {
 	if entitlementService.cache != nil {
-		_ = entitlementService.cache.InvalidateWorkspace(wsUUID)
+		if err := entitlementService.cache.InvalidateWorkspace(wsUUID); err != nil {
+			return
+		}
 	}
 }
 
@@ -329,7 +337,9 @@ func (entitlementService *localEntitlementService) loadFeature(ctx context.Conte
 		return nil, err
 	}
 	if entitlementService.cache != nil {
-		_ = entitlementService.cache.SetFeature(feature)
+		if err := entitlementService.cache.SetFeature(feature); err != nil {
+			return nil, err
+		}
 	}
 	return feature, nil
 }
@@ -348,7 +358,9 @@ func (entitlementService *localEntitlementService) loadPackages(ctx context.Cont
 		return nil, false
 	}
 	if entitlementService.cache != nil {
-		_ = entitlementService.cache.SetPackages(wsUUID, packages)
+		if err := entitlementService.cache.SetPackages(wsUUID, packages); err != nil {
+			return nil, false
+		}
 	}
 	return packages, true
 }
@@ -367,7 +379,9 @@ func (entitlementService *localEntitlementService) loadBoosts(ctx context.Contex
 		return nil, false
 	}
 	if entitlementService.cache != nil {
-		_ = entitlementService.cache.SetBoosts(wsUUID, boosts)
+		if err := entitlementService.cache.SetBoosts(wsUUID, boosts); err != nil {
+			return nil, false
+		}
 	}
 	return boosts, true
 }
@@ -387,7 +401,9 @@ func (entitlementService *localEntitlementService) loadUsage(ctx context.Context
 		return 0, false
 	}
 	if entitlementService.cache != nil {
-		_ = entitlementService.cache.SetUsage(wsUUID, featureCode, used)
+		if err := entitlementService.cache.SetUsage(wsUUID, featureCode, used); err != nil {
+			return 0, false
+		}
 	}
 	return used, true
 }

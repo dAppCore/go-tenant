@@ -8,10 +8,9 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"sync/atomic"
-	"testing"
 	"time"
 
-	"dappco.re/go/core"
+	"dappco.re/go"
 	"dappco.re/go/store"
 )
 
@@ -19,7 +18,7 @@ func intPtr(value int) *int {
 	return &value
 }
 
-func TestBoost_IsUsable_Good(t *testing.T) {
+func TestAX7_Boost_IsUsable_Good(t *core.T) {
 	boost := Boost{
 		BoostType:        BoostTypeAddLimit,
 		Status:           BoostStatusActive,
@@ -31,7 +30,7 @@ func TestBoost_IsUsable_Good(t *testing.T) {
 	}
 }
 
-func TestBoost_IsUsable_Bad(t *testing.T) {
+func TestAX7_Boost_IsUsable_Bad(t *core.T) {
 	expiredAt := time.Now().Add(-time.Minute)
 	boost := Boost{
 		BoostType:        BoostTypeAddLimit,
@@ -45,7 +44,7 @@ func TestBoost_IsUsable_Bad(t *testing.T) {
 	}
 }
 
-func TestBoost_IsUsable_Ugly(t *testing.T) {
+func TestAX7_Boost_IsUsable_Ugly(t *core.T) {
 	boost := Boost{
 		BoostType:        BoostTypeAddLimit,
 		Status:           BoostStatusActive,
@@ -57,26 +56,26 @@ func TestBoost_IsUsable_Ugly(t *testing.T) {
 	}
 }
 
-func TestEntitlementResult_AsError_Good(t *testing.T) {
+func TestAX7_EntitlementResult_AsError_Good(t *core.T) {
 	if err := Allow("pages", intPtr(10), intPtr(3)).AsError(); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 }
 
-func TestEntitlementResult_AsError_Bad(t *testing.T) {
+func TestAX7_EntitlementResult_AsError_Bad(t *core.T) {
 	err := Deny("pages", "limit reached", intPtr(10), intPtr(10)).AsError()
 	if err == nil || !core.Is(err, ErrEntitlementDenied) {
 		t.Fatalf("expected ErrEntitlementDenied, got %v", err)
 	}
 }
 
-func TestEntitlementResult_AsError_Ugly(t *testing.T) {
+func TestAX7_EntitlementResult_AsError_Ugly(t *core.T) {
 	if err := AllowUnlimited("pages").AsError(); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 }
 
-func TestEntitlementResult_UsagePercent_Good(t *testing.T) {
+func TestAX7_EntitlementResult_UsagePercent_Good(t *core.T) {
 	result := Allow("pages", intPtr(10), intPtr(3))
 	pct := result.UsagePercent()
 	if pct == nil {
@@ -87,14 +86,14 @@ func TestEntitlementResult_UsagePercent_Good(t *testing.T) {
 	}
 }
 
-func TestEntitlementResult_UsagePercent_Bad(t *testing.T) {
+func TestAX7_EntitlementResult_UsagePercent_Bad(t *core.T) {
 	result := AllowUnlimited("pages")
 	if pct := result.UsagePercent(); pct != nil {
 		t.Fatalf("expected nil for unlimited result, got %v", *pct)
 	}
 }
 
-func TestEntitlementResult_UsagePercent_Ugly(t *testing.T) {
+func TestAX7_EntitlementResult_UsagePercent_Ugly(t *core.T) {
 	result := Allow("pages", intPtr(10), intPtr(15))
 	pct := result.UsagePercent()
 	if pct == nil {
@@ -105,14 +104,14 @@ func TestEntitlementResult_UsagePercent_Ugly(t *testing.T) {
 	}
 }
 
-func TestFeature_PoolCode_Good(t *testing.T) {
+func TestAX7_Feature_PoolCode_Good(t *core.T) {
 	feature := Feature{Code: "pages"}
 	if got := feature.PoolCode(); got != "pages" {
 		t.Fatalf("expected root code, got %q", got)
 	}
 }
 
-func TestFeature_PoolCode_Bad(t *testing.T) {
+func TestAX7_Feature_PoolCode_Bad(t *core.T) {
 	parent := "pages"
 	feature := Feature{Code: "pages.bio", ParentCode: &parent}
 	if got := feature.PoolCode(); got != "pages" {
@@ -120,14 +119,14 @@ func TestFeature_PoolCode_Bad(t *testing.T) {
 	}
 }
 
-func TestFeature_PoolCode_Ugly(t *testing.T) {
+func TestAX7_Feature_PoolCode_Ugly(t *core.T) {
 	feature := Feature{Code: "pages.bio"}
 	if got := feature.PoolCode(); got != "pages.bio" {
 		t.Fatalf("expected fallback code, got %q", got)
 	}
 }
 
-func TestTenantCache_SetGet_Good(t *testing.T) {
+func TestTenantCache_SetGet_Good(t *core.T) {
 	st, err := store.New(":memory:")
 	if err != nil {
 		t.Fatalf("new store: %v", err)
@@ -148,14 +147,14 @@ func TestTenantCache_SetGet_Good(t *testing.T) {
 	}
 }
 
-func TestTenantCache_SetGet_Bad(t *testing.T) {
+func TestTenantCache_SetGet_Bad(t *core.T) {
 	cache := NewTenantCache(nil)
 	if got, ok := cache.GetWorkspace("missing"); ok || got != nil {
 		t.Fatalf("expected miss, got %+v", got)
 	}
 }
 
-func TestTenantCache_SetGet_Ugly(t *testing.T) {
+func TestTenantCache_SetGet_Ugly(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{ID: 7, UUID: "uuid-7", Slug: "acme"}
 	_ = cache.SetWorkspace(workspace)
@@ -179,7 +178,7 @@ func TestTenantCache_SetGet_Ugly(t *testing.T) {
 	}
 }
 
-func TestTenantCache_SetWorkspaceRefresh_Good(t *testing.T) {
+func TestTenantCache_SetWorkspaceRefresh_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{ID: 7, UUID: "uuid-7", Slug: "acme"}
 	if err := cache.SetWorkspace(workspace); err != nil {
@@ -206,7 +205,7 @@ func TestTenantCache_SetWorkspaceRefresh_Good(t *testing.T) {
 	}
 }
 
-func TestTenantCache_SetUser_Good(t *testing.T) {
+func TestTenantCache_SetUser_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	user := &User{UUID: "user-7", Name: "Ada", Email: "ada@example.uk"}
 	if err := cache.SetUser(user); err != nil {
@@ -221,14 +220,14 @@ func TestTenantCache_SetUser_Good(t *testing.T) {
 	}
 }
 
-func TestTenantCache_SetUser_Bad(t *testing.T) {
+func TestTenantCache_SetUser_Bad(t *core.T) {
 	cache := NewTenantCache(nil)
 	if err := cache.SetUser(nil); !core.Is(err, ErrNoUserContext) {
 		t.Fatalf("expected ErrNoUserContext, got %v", err)
 	}
 }
 
-func TestTenantCache_SetUser_Ugly(t *testing.T) {
+func TestTenantCache_SetUser_Ugly(t *core.T) {
 	cache := NewTenantCache(nil)
 	if err := cache.SetUser(&User{Name: "Ada"}); !core.Is(err, ErrNoUserContext) {
 		t.Fatalf("expected ErrNoUserContext for missing UUID, got %v", err)
@@ -238,7 +237,7 @@ func TestTenantCache_SetUser_Ugly(t *testing.T) {
 	}
 }
 
-func TestTenantCache_NilReceiver_Good(t *testing.T) {
+func TestTenantCache_NilReceiver_Good(t *core.T) {
 	var cache *TenantCache
 
 	if got, ok := cache.GetWorkspace("uuid-7"); ok || got != nil {
@@ -252,7 +251,7 @@ func TestTenantCache_NilReceiver_Good(t *testing.T) {
 	}
 }
 
-func TestTenantCache_NilReceiver_Bad(t *testing.T) {
+func TestTenantCache_NilReceiver_Bad(t *core.T) {
 	var cache *TenantCache
 
 	if err := cache.SetWorkspace(&Workspace{UUID: "uuid-7"}); !core.Is(err, ErrNoWorkspaceContext) {
@@ -266,7 +265,7 @@ func TestTenantCache_NilReceiver_Bad(t *testing.T) {
 	}
 }
 
-func TestTenantCache_NilReceiver_Ugly(t *testing.T) {
+func TestTenantCache_NilReceiver_Ugly(t *core.T) {
 	var cache *TenantCache
 
 	if err := cache.InvalidateWorkspace("uuid-7"); err != nil {
@@ -280,7 +279,7 @@ func TestTenantCache_NilReceiver_Ugly(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_Good(t *testing.T) {
+func TestAX7_Tenant_Can_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
@@ -310,7 +309,7 @@ func TestTenant_Can_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_MixedCase_Good(t *testing.T) {
+func TestAX7_Tenant_Can_MixedCase_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
@@ -338,14 +337,14 @@ func TestTenant_Can_MixedCase_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_Bad(t *testing.T) {
+func TestAX7_Tenant_Can_Bad(t *core.T) {
 	tenant := &Tenant{}
 	if result := tenant.Can(context.Background(), nil, "pages", 0); !result.IsDenied() {
 		t.Fatalf("expected denial, got %+v", result)
 	}
 }
 
-func TestTenant_Can_Ugly(t *testing.T) {
+func TestAX7_Tenant_Can_Ugly(t *core.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
 	result := tenant.Can(context.Background(), &Workspace{UUID: "uuid-7"}, "pages", 0)
 	if !result.IsDenied() {
@@ -353,7 +352,7 @@ func TestTenant_Can_Ugly(t *testing.T) {
 	}
 }
 
-func TestTenant_Register_Good(t *testing.T) {
+func TestAX7_Register_Good(t *core.T) {
 	c := core.New()
 	result := Register(c)
 	if !result.OK {
@@ -374,7 +373,7 @@ func TestTenant_Register_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_BoostOnly_Bad(t *testing.T) {
+func TestAX7_Tenant_Can_BoostOnly_Bad(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
@@ -398,7 +397,7 @@ func TestTenant_Can_BoostOnly_Bad(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_UnlimitedBoost_Good(t *testing.T) {
+func TestAX7_Tenant_Can_UnlimitedBoost_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
@@ -419,7 +418,7 @@ func TestTenant_Can_UnlimitedBoost_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_UnlimitedFeature_Good(t *testing.T) {
+func TestAX7_Tenant_Can_UnlimitedFeature_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeUnlimited}
@@ -441,7 +440,7 @@ func TestTenant_Can_UnlimitedFeature_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_UnlimitedFeature_Bad(t *testing.T) {
+func TestAX7_Tenant_Can_UnlimitedFeature_Bad(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeUnlimited}
@@ -459,7 +458,7 @@ func TestTenant_Can_UnlimitedFeature_Bad(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_UnlimitedFeature_Ugly(t *testing.T) {
+func TestAX7_Tenant_Can_UnlimitedFeature_Ugly(t *core.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
 	result := tenant.Can(context.Background(), &Workspace{UUID: "uuid-7"}, "pages", 1)
 	if result.IsAllowed() {
@@ -467,7 +466,7 @@ func TestTenant_Can_UnlimitedFeature_Ugly(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_NonStackablePackagesUseHighestLimit_Good(t *testing.T) {
+func TestAX7_Tenant_Can_NonStackablePackagesUseHighestLimit_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
@@ -499,7 +498,7 @@ func TestTenant_Can_NonStackablePackagesUseHighestLimit_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_BooleanPackage_Good(t *testing.T) {
+func TestAX7_Tenant_Can_BooleanPackage_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "api_access", Name: "API Access", Type: FeatureTypeBoolean}
@@ -524,7 +523,7 @@ func TestTenant_Can_BooleanPackage_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_Can_BooleanEnableBoost_Good(t *testing.T) {
+func TestAX7_Tenant_Can_BooleanEnableBoost_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "api_access", Name: "API Access", Type: FeatureTypeBoolean}
@@ -548,7 +547,7 @@ func TestTenant_Can_BooleanEnableBoost_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_RecordUsage_Good(t *testing.T) {
+func TestAX7_Tenant_RecordUsage_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
@@ -580,14 +579,14 @@ func TestTenant_RecordUsage_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_RecordUsage_Bad(t *testing.T) {
+func TestAX7_Tenant_RecordUsage_Bad(t *core.T) {
 	tenant := &Tenant{}
 	if err := tenant.RecordUsage(context.Background(), nil, "pages", 1, nil, nil); !core.Is(err, ErrNoWorkspaceContext) {
 		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
 	}
 }
 
-func TestTenant_RecordUsage_Ugly(t *testing.T) {
+func TestAX7_Tenant_RecordUsage_Ugly(t *core.T) {
 	serverUsage := 3
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -638,7 +637,7 @@ func TestTenant_RecordUsage_Ugly(t *testing.T) {
 	}
 }
 
-func TestTenant_RecordUsage_RemoteInvalidatesUsageOnly_Good(t *testing.T) {
+func TestAX7_Tenant_RecordUsage_RemoteInvalidatesUsageOnly_Good(t *core.T) {
 	var packagesHits int32
 	var boostsHits int32
 	var usageHits int32
@@ -699,7 +698,7 @@ func TestTenant_RecordUsage_RemoteInvalidatesUsageOnly_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_GetUsageSummary_BooleanEnableBoost_Good(t *testing.T) {
+func TestTenant_GetUsageSummary_BooleanEnableBoost_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "api_access", Name: "API Access", Type: FeatureTypeBoolean}
@@ -729,7 +728,7 @@ func TestTenant_GetUsageSummary_BooleanEnableBoost_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_GetWorkspaceByID_Good(t *testing.T) {
+func TestAX7_Tenant_GetWorkspaceByID_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{ID: 42, UUID: "uuid-42", Slug: "acme"}
 	if err := cache.SetWorkspace(workspace); err != nil {
@@ -745,7 +744,7 @@ func TestTenant_GetWorkspaceByID_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_GetWorkspaceByID_RemoteGood(t *testing.T) {
+func TestAX7_Tenant_GetWorkspaceByID_RemoteGood(t *core.T) {
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/workspaces/id/42" {
@@ -778,21 +777,21 @@ func TestTenant_GetWorkspaceByID_RemoteGood(t *testing.T) {
 	}
 }
 
-func TestTenant_GetWorkspaceByID_Bad(t *testing.T) {
+func TestAX7_Tenant_GetWorkspaceByID_Bad(t *core.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
 	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !core.Is(err, ErrWorkspaceNotFound) {
 		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
 	}
 }
 
-func TestTenant_GetWorkspaceByID_Ugly(t *testing.T) {
+func TestAX7_Tenant_GetWorkspaceByID_Ugly(t *core.T) {
 	var tenant *Tenant
 	if _, err := tenant.GetWorkspaceByID(context.Background(), 99); !core.Is(err, ErrWorkspaceNotFound) {
 		t.Fatalf("expected ErrWorkspaceNotFound for nil tenant, got %v", err)
 	}
 }
 
-func TestTenant_GetUser_Good(t *testing.T) {
+func TestAX7_Tenant_GetUser_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	cached := &User{UUID: "user-7", Email: "cached@example.uk", Name: "Cached"}
 	if err := cache.SetUser(cached); err != nil {
@@ -810,14 +809,14 @@ func TestTenant_GetUser_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_GetUser_Bad(t *testing.T) {
+func TestAX7_Tenant_GetUser_Bad(t *core.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
 	if _, err := tenant.GetUser(context.Background()); !core.Is(err, ErrNoUserContext) {
 		t.Fatalf("expected ErrNoUserContext, got %v", err)
 	}
 }
 
-func TestTenant_GetUser_Ugly(t *testing.T) {
+func TestAX7_Tenant_GetUser_Ugly(t *core.T) {
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -848,7 +847,7 @@ func TestTenant_GetUser_Ugly(t *testing.T) {
 	}
 }
 
-func TestTenant_GetUsageSummary_NonStackablePackagesUseHighestLimit_Good(t *testing.T) {
+func TestTenant_GetUsageSummary_NonStackablePackagesUseHighestLimit_Good(t *core.T) {
 	cache := NewTenantCache(nil)
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	feature := &Feature{Code: "pages", Name: "Pages", Type: FeatureTypeLimit}
@@ -886,7 +885,7 @@ func TestTenant_GetUsageSummary_NonStackablePackagesUseHighestLimit_Good(t *test
 	}
 }
 
-func TestTenantClient_GetWorkspaceBySubdomain_Good(t *testing.T) {
+func TestAX7_TenantClient_GetWorkspaceBySubdomain_Good(t *core.T) {
 	var subdomainHit atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -915,7 +914,7 @@ func TestTenantClient_GetWorkspaceBySubdomain_Good(t *testing.T) {
 	}
 }
 
-func TestTenantClient_GetWorkspaceBySubdomain_Bad(t *testing.T) {
+func TestAX7_TenantClient_GetWorkspaceBySubdomain_Bad(t *core.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}))
@@ -927,14 +926,14 @@ func TestTenantClient_GetWorkspaceBySubdomain_Bad(t *testing.T) {
 	}
 }
 
-func TestTenantClient_GetWorkspaceBySubdomain_Ugly(t *testing.T) {
+func TestAX7_TenantClient_GetWorkspaceBySubdomain_Ugly(t *core.T) {
 	client := NewTenantClient("://bad-url", "token")
 	if _, err := client.GetWorkspaceBySubdomain(context.Background(), "acme.host.uk.com"); err == nil {
 		t.Fatal("expected error for invalid base URL")
 	}
 }
 
-func TestTenantClient_GetWorkspaceBySlug_Good(t *testing.T) {
+func TestAX7_TenantClient_GetWorkspaceBySlug_Good(t *core.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/acme":
@@ -962,7 +961,7 @@ func TestTenantClient_GetWorkspaceBySlug_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_CheckUsageAlerts_Good(t *testing.T) {
+func TestAX7_Tenant_CheckUsageAlerts_Good(t *core.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}
 	var fired []int
@@ -983,7 +982,7 @@ func TestTenant_CheckUsageAlerts_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_CheckUsageAlerts_MixedCase_Good(t *testing.T) {
+func TestAX7_Tenant_CheckUsageAlerts_MixedCase_Good(t *core.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}
 	var fired []int
@@ -1001,7 +1000,7 @@ func TestTenant_CheckUsageAlerts_MixedCase_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_CheckUsageAlerts_Bad(t *testing.T) {
+func TestAX7_Tenant_CheckUsageAlerts_Bad(t *core.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}
 	var fired []int
@@ -1020,7 +1019,7 @@ func TestTenant_CheckUsageAlerts_Bad(t *testing.T) {
 	}
 }
 
-func TestTenant_CheckUsageAlerts_Ugly(t *testing.T) {
+func TestAX7_Tenant_CheckUsageAlerts_Ugly(t *core.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}
 	var fired []int
@@ -1041,7 +1040,7 @@ func TestTenant_CheckUsageAlerts_Ugly(t *testing.T) {
 	}
 }
 
-func TestTenant_CheckUsageAlerts_PanicHandler_Good(t *testing.T) {
+func TestAX7_Tenant_CheckUsageAlerts_PanicHandler_Good(t *core.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}
 	var fired []int
@@ -1061,7 +1060,7 @@ func TestTenant_CheckUsageAlerts_PanicHandler_Good(t *testing.T) {
 	}
 }
 
-func TestTenant_CheckUsageAlerts_Overflow_Good(t *testing.T) {
+func TestAX7_Tenant_CheckUsageAlerts_Overflow_Good(t *core.T) {
 	tenant := &Tenant{}
 	workspace := &Workspace{UUID: "uuid-7"}
 	var fired []int
@@ -1081,7 +1080,7 @@ func TestTenant_CheckUsageAlerts_Overflow_Good(t *testing.T) {
 	}
 }
 
-func TestWorkspaceScope_Middleware_InvalidID_Bad(t *testing.T) {
+func TestWorkspaceScope_Middleware_InvalidID_Bad(t *core.T) {
 	tenant := &Tenant{
 		cache: NewTenantCache(nil),
 	}
@@ -1108,7 +1107,7 @@ func TestWorkspaceScope_Middleware_InvalidID_Bad(t *testing.T) {
 	}
 }
 
-func TestWorkspaceScope_Middleware_IDRemoteGood(t *testing.T) {
+func TestWorkspaceScope_Middleware_IDRemoteGood(t *core.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/workspaces/id/42" {
 			http.NotFound(w, r)
@@ -1144,7 +1143,7 @@ func TestWorkspaceScope_Middleware_IDRemoteGood(t *testing.T) {
 	}
 }
 
-func TestWorkspaceScope_ScopeFunc_Good(t *testing.T) {
+func TestAX7_WorkspaceScope_ScopeFunc_Good(t *core.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	if err := tenant.cache.SetWorkspace(workspace); err != nil {
@@ -1167,7 +1166,7 @@ func TestWorkspaceScope_ScopeFunc_Good(t *testing.T) {
 	}
 }
 
-func TestWorkspaceScope_ScopeFunc_Bad(t *testing.T) {
+func TestAX7_WorkspaceScope_ScopeFunc_Bad(t *core.T) {
 	scope := NewWorkspaceScope(&Tenant{cache: NewTenantCache(nil)})
 	if err := scope.ScopeFunc(context.Background(), "missing", func(ctx context.Context) error {
 		return nil
@@ -1176,7 +1175,7 @@ func TestWorkspaceScope_ScopeFunc_Bad(t *testing.T) {
 	}
 }
 
-func TestWorkspaceScope_ScopeFunc_Ugly(t *testing.T) {
+func TestAX7_WorkspaceScope_ScopeFunc_Ugly(t *core.T) {
 	tenant := &Tenant{cache: NewTenantCache(nil)}
 	workspace := &Workspace{UUID: "uuid-7", Slug: "acme"}
 	if err := tenant.cache.SetWorkspace(workspace); err != nil {
@@ -1192,7 +1191,7 @@ func TestWorkspaceScope_ScopeFunc_Ugly(t *testing.T) {
 	}
 }
 
-func TestWorkspaceContext_Good(t *testing.T) {
+func TestWorkspaceContext_Good(t *core.T) {
 	workspace := &Workspace{UUID: "uuid-1"}
 	ctx := WithWorkspace(context.Background(), workspace)
 	got, err := WorkspaceFromCtx(ctx)
@@ -1204,19 +1203,19 @@ func TestWorkspaceContext_Good(t *testing.T) {
 	}
 }
 
-func TestWorkspaceContext_Bad(t *testing.T) {
+func TestWorkspaceContext_Bad(t *core.T) {
 	if _, err := WorkspaceFromCtx(context.Background()); !core.Is(err, ErrNoWorkspaceContext) {
 		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
 	}
 }
 
-func TestWorkspaceContext_Ugly(t *testing.T) {
+func TestWorkspaceContext_Ugly(t *core.T) {
 	if ctx := WithWorkspace(nil, nil); ctx == nil {
 		t.Fatal("expected non-nil context")
 	}
 }
 
-func TestWorkspaceContextHolder_Good(t *testing.T) {
+func TestWorkspaceContextHolder_Good(t *core.T) {
 	workspace := &Workspace{UUID: "uuid-1"}
 	user := &User{UUID: "user-1"}
 
@@ -1241,7 +1240,7 @@ func TestWorkspaceContextHolder_Good(t *testing.T) {
 	}
 }
 
-func TestWorkspaceContextHolder_Bad(t *testing.T) {
+func TestWorkspaceContextHolder_Bad(t *core.T) {
 	holder := WorkspaceContext{}
 	if _, err := holder.Workspace(); !core.Is(err, ErrNoWorkspaceContext) {
 		t.Fatalf("expected ErrNoWorkspaceContext, got %v", err)
@@ -1251,7 +1250,7 @@ func TestWorkspaceContextHolder_Bad(t *testing.T) {
 	}
 }
 
-func TestWorkspaceContextHolder_Ugly(t *testing.T) {
+func TestWorkspaceContextHolder_Ugly(t *core.T) {
 	holder := WorkspaceContext{Context: nil}
 	holder = holder.WithWorkspace(nil)
 	holder = holder.WithUser(nil)
