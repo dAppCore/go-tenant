@@ -6,7 +6,7 @@ require dappco.re/go v0.9.0
 
 require (
 	dappco.re/go/core v0.8.0-alpha.1 // indirect
-	dappco.re/go/io v0.8.0-alpha.1 // indirect
+	dappco.re/go/io v0.9.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/apache/arrow-go/v18 v18.1.0 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
@@ -37,7 +37,7 @@ require (
 )
 
 require (
-	dappco.re/go/store v0.8.0-alpha.1
+	dappco.re/go/store v0.9.0
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
