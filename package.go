@@ -29,10 +29,25 @@ type PackageFeature struct {
 //
 //	if lim := pkg.GetFeatureLimit("pages"); lim != nil { total += *lim }
 func (p Package) GetFeatureLimit(featureCode string) *int {
+	featureCode = normalizedFeatureCode(featureCode)
 	for _, f := range p.Features {
-		if f.FeatureCode == featureCode {
+		if normalizedFeatureCode(f.FeatureCode) == featureCode {
 			return f.LimitValue
 		}
 	}
 	return nil
+}
+
+// includesFeature checks whether this package has any assignment for featureCode,
+// regardless of the limit value.
+//
+//	pkg.includesFeature("pages")  // true if "pages" is in pkg.Features
+func (p Package) includesFeature(featureCode string) bool {
+	featureCode = normalizedFeatureCode(featureCode)
+	for _, feature := range p.Features {
+		if normalizedFeatureCode(feature.FeatureCode) == featureCode {
+			return true
+		}
+	}
+	return false
 }

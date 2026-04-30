@@ -21,6 +21,8 @@ type Feature struct {
 }
 
 // FeatureType controls how a feature is evaluated.
+//
+//	feature := tenant.Feature{Code: "pages", Type: tenant.FeatureTypeLimit}
 type FeatureType string
 
 const (
@@ -30,6 +32,8 @@ const (
 )
 
 // ResetType controls when usage counters reset.
+//
+//	feature := tenant.Feature{Code: "pages", ResetType: tenant.ResetMonthly}
 type ResetType string
 
 const (

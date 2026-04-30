@@ -28,6 +28,52 @@ type Workspace struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+// WorkspaceContext is a request-scoped holder for workspace and user values.
+//
+//	ctxHolder := tenant.WorkspaceContext{Context: r.Context()}.
+//		WithWorkspace(&tenant.Workspace{UUID: "ws-7", Slug: "acme"}).
+//		WithUser(&tenant.User{UUID: "user-9", Email: "ada@example.uk"})
+type WorkspaceContext struct {
+	Context context.Context
+}
+
+func (c WorkspaceContext) baseContext() context.Context {
+	if c.Context != nil {
+		return c.Context
+	}
+	return context.Background()
+}
+
+// WithWorkspace returns a new holder carrying the workspace.
+//
+//	contextHolder := tenant.WorkspaceContext{}.WithWorkspace(workspace)
+func (c WorkspaceContext) WithWorkspace(ws *Workspace) WorkspaceContext {
+	c.Context = WithWorkspace(c.baseContext(), ws)
+	return c
+}
+
+// WithUser returns a new holder carrying the user.
+//
+//	contextHolder := tenant.WorkspaceContext{}.WithUser(authenticatedUser)
+func (c WorkspaceContext) WithUser(user *User) WorkspaceContext {
+	c.Context = WithUser(c.baseContext(), user)
+	return c
+}
+
+// Workspace resolves the workspace from the holder context.
+//
+//	ws, err := tenant.WorkspaceContext{Context: ctx}.Workspace()
+func (c WorkspaceContext) Workspace() (*Workspace, error) {
+	return WorkspaceFromCtx(c.baseContext())
+}
+
+// User resolves the user from the holder context.
+//
+//	user, err := tenant.WorkspaceContext{Context: ctx}.User()
+func (c WorkspaceContext) User() (*User, error) {
+	return UserFromCtx(c.baseContext())
+}
+
 // contextKey is an unexported type for context keys to prevent collisions.
 type contextKey int
 
@@ -65,6 +111,10 @@ func WithWorkspace(ctx context.Context, ws *Workspace) context.Context {
 	return context.WithValue(ctx, workspaceContextKey, ws)
 }
 
+// cloneWorkspace returns a deep copy of the workspace to prevent cache mutation.
+// Settings map is copied so modifications to the clone do not affect the original.
+//
+//	safe := cloneWorkspace(cachedWorkspace)
 func cloneWorkspace(ws *Workspace) *Workspace {
 	if ws == nil {
 		return nil

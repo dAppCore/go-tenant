@@ -13,7 +13,7 @@ const (
 
 // UsageAlert represents a triggered threshold condition for a workspace+feature.
 //
-//	ten.OnUsageAlert(func(a tenant.UsageAlert) { notify(a.WorkspaceUUID, a.Threshold) })
+//	ten.OnUsageAlert(func(alert tenant.UsageAlert) { notifyUsageTeam(alert.WorkspaceUUID, alert.Threshold) })
 type UsageAlert struct {
 	WorkspaceUUID string
 	FeatureCode   string
@@ -25,4 +25,6 @@ type UsageAlert struct {
 }
 
 // AlertHandler is called when a usage threshold is crossed.
+//
+//	tenantService.OnUsageAlert(func(alert tenant.UsageAlert) { logUsageAlert(alert) })
 type AlertHandler func(UsageAlert)

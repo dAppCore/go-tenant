@@ -5,8 +5,6 @@ package tenant
 import (
 	"context"
 	"net/http"
-	"net/netip"
-	"strings"
 )
 
 // WorkspaceScope resolves and injects workspace context for HTTP handlers.
@@ -58,7 +56,8 @@ func (s *WorkspaceScope) Middleware() func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(WithWorkspace(r.Context(), workspace)))
+			requestContext := WorkspaceContext{Context: r.Context()}.WithWorkspace(workspace)
+			next.ServeHTTP(w, r.WithContext(requestContext.Context))
 		})
 	}
 }
@@ -93,12 +92,16 @@ func (s *WorkspaceScope) ScopeFunc(ctx context.Context, slug string, fn func(con
 	}
 	workspace, err := s.tenant.GetWorkspace(ctx, slug)
 	if err != nil {
+		if err == ErrWorkspaceNotFound {
+			return ErrNoWorkspaceContext
+		}
 		return err
 	}
 	if workspace == nil {
 		return ErrNoWorkspaceContext
 	}
-	return fn(WithWorkspace(ctx, workspace))
+	requestContext := WorkspaceContext{Context: ctx}.WithWorkspace(workspace)
+	return fn(requestContext.Context)
 }
 
 func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
@@ -106,17 +109,16 @@ func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
 		return nil, ErrNoWorkspaceContext
 	}
 	if idValue := r.Header.Get("X-Workspace-ID"); idValue != "" {
-		if id, err := parseInt64(idValue); err == nil && s.tenant.cache != nil {
-			if workspace, ok := s.tenant.cache.GetWorkspaceByID(id); ok {
-				return workspace, nil
-			}
+		if id, err := parseInt64(idValue); err == nil {
+			return s.tenant.GetWorkspaceByID(r.Context(), id)
 		}
+		return nil, ErrNoWorkspaceContext
 	}
 	if slug := r.Header.Get("X-Workspace-Slug"); slug != "" {
 		return s.tenant.GetWorkspace(r.Context(), slug)
 	}
-	if host := cleanHost(r.Host); host != "" {
-		if workspace, err := s.tenant.GetWorkspaceBySubdomain(r.Context(), host); err == nil && workspace != nil {
+	if r.Host != "" {
+		if workspace, err := s.tenant.GetWorkspaceBySubdomain(r.Context(), r.Host); err == nil && workspace != nil {
 			return workspace, nil
 		}
 	}
@@ -126,19 +128,11 @@ func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
 	return nil, ErrNoWorkspaceContext
 }
 
-func cleanHost(host string) string {
-	if host == "" {
-		return ""
-	}
-	if parsed, err := netip.ParseAddrPort(host); err == nil {
-		return parsed.Addr().String()
-	}
-	if colon := strings.LastIndex(host, ":"); colon > 0 {
-		return host[:colon]
-	}
-	return host
-}
-
+// parseInt64 parses a decimal string to int64 without importing strconv.
+// Only accepts digit characters — no signs, whitespace, or other formatting.
+//
+//	parseInt64("42")     // 42, nil
+//	parseInt64("bogus")  // 0, ErrNoWorkspaceContext
 func parseInt64(value string) (int64, error) {
 	var result int64
 	for _, r := range value {

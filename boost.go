@@ -26,7 +26,7 @@ type BoostType string
 
 const (
 	BoostTypeAddLimit  BoostType = "add_limit" // adds N to the package limit
-	BoostTypeEnable    BoostType = "enable"    // enables a boolean feature
+	BoostTypeEnable    BoostType = "enable"    // boolean boost marker in the PHP model
 	BoostTypeUnlimited BoostType = "unlimited" // removes the cap entirely
 )
 
@@ -68,9 +68,6 @@ func (b Boost) Remaining() int {
 	case BoostTypeUnlimited:
 		return -1
 	case BoostTypeEnable:
-		if b.Status == BoostStatusActive && b.IsUsable() {
-			return 1
-		}
 		return 0
 	default:
 		remaining := b.LimitValue - b.ConsumedQuantity

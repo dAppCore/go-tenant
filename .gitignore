@@ -1,4 +1,6 @@
 .core/
+.gocache/
+.gomodcache/
 .idea/
 *.exe
 *.test

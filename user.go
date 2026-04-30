@@ -4,8 +4,9 @@ package tenant
 
 import (
 	"context"
-	"strings"
 	"time"
+
+	"dappco.re/go"
 )
 
 // User is the authenticated identity. Tier controls feature access for personal namespaces.
@@ -24,6 +25,8 @@ type User struct {
 }
 
 // UserTier maps to PHP's UserTier enum.
+//
+//	user := tenant.User{Tier: tenant.TierApollo}
 type UserTier string
 
 const (
@@ -49,8 +52,9 @@ func (t UserTier) MaxWorkspaces() int {
 
 // HasFeature checks whether this tier includes the named feature code.
 //
-//	if u.Tier.HasFeature("api_access") { ... }
+//	if user.Tier.HasFeature("api_access") { enableAPIAccess() }
 func (t UserTier) HasFeature(code string) bool {
+	code = normalizedFeatureCode(code)
 	switch t {
 	case TierHades:
 		return true
@@ -89,6 +93,9 @@ func WithUser(ctx context.Context, user *User) context.Context {
 	return context.WithValue(ctx, userContextKey, user)
 }
 
+// normalizedFeatureCode trims whitespace and lowercases a feature code for consistent lookup.
+//
+//	normalizedFeatureCode("  PaGeS  ")  // "pages"
 func normalizedFeatureCode(code string) string {
-	return strings.ToLower(strings.TrimSpace(code))
+	return core.Lower(core.Trim(code))
 }
