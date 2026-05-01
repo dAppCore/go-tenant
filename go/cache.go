@@ -69,21 +69,21 @@ func NewTenantCache(st *store.Store) *TenantCache {
 // persistJSON writes a JSON-serialised value to go-store with the given TTL.
 //
 //	c.persistJSON("ws:uuid-7:record", "data", workspace, TTLWorkspace)
-func (c *TenantCache) persistJSON(group, key string, value any, ttl time.Duration) error {
+func (c *TenantCache) persistJSON(group, key string, value any, ttl time.Duration) core.Result {
 	if c == nil || c.store == nil {
-		return nil
+		return core.Ok(nil)
 	}
-	return c.store.SetWithTTL(group, key, core.JSONMarshalString(value), ttl)
+	return core.ResultOf(nil, c.store.SetWithTTL(group, key, core.JSONMarshalString(value), ttl))
 }
 
 // persistString writes a plain string value to go-store with the given TTL.
 //
 //	c.persistString("ws:slug:acme", "uuid", "uuid-7", TTLWorkspace)
-func (c *TenantCache) persistString(group, key, value string, ttl time.Duration) error {
+func (c *TenantCache) persistString(group, key, value string, ttl time.Duration) core.Result {
 	if c == nil || c.store == nil {
-		return nil
+		return core.Ok(nil)
 	}
-	return c.store.SetWithTTL(group, key, value, ttl)
+	return core.ResultOf(nil, c.store.SetWithTTL(group, key, value, ttl))
 }
 
 // readJSON reads and deserialises a JSON value from go-store.
@@ -118,21 +118,21 @@ func (c *TenantCache) readString(group, key string) (string, bool) {
 // deleteStoreGroup removes all entries in a go-store group.
 //
 //	c.deleteStoreGroup("ws:uuid-7:record")
-func (c *TenantCache) deleteStoreGroup(group string) error {
+func (c *TenantCache) deleteStoreGroup(group string) core.Result {
 	if c == nil || c.store == nil {
-		return nil
+		return core.Ok(nil)
 	}
-	return c.store.DeleteGroup(group)
+	return core.ResultOf(nil, c.store.DeleteGroup(group))
 }
 
 // deleteStorePrefix removes all entries whose group starts with the given prefix.
 //
 //	c.deleteStorePrefix("ws:uuid-7:usage:")
-func (c *TenantCache) deleteStorePrefix(prefix string) error {
+func (c *TenantCache) deleteStorePrefix(prefix string) core.Result {
 	if c == nil || c.store == nil {
-		return nil
+		return core.Ok(nil)
 	}
-	return c.store.DeletePrefix(prefix)
+	return core.ResultOf(nil, c.store.DeletePrefix(prefix))
 }
 
 func (c *TenantCache) now() time.Time {
@@ -188,12 +188,12 @@ func cloneUser(user *User) *User {
 // SetWorkspace stores the workspace record.
 //
 //	cache.SetWorkspace(&tenant.Workspace{ID: 7, UUID: "uuid-7", Slug: "acme"})
-func (c *TenantCache) SetWorkspace(ws *Workspace) error {
+func (c *TenantCache) SetWorkspace(ws *Workspace) core.Result {
 	if c == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	if ws == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -201,16 +201,16 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 	for id, uuid := range c.workspaceIDs {
 		if uuid == ws.UUID {
 			delete(c.workspaceIDs, id)
-			if err := c.deleteStoreGroup(workspaceIDGroup(id)); err != nil {
-				return err
+			if r := c.deleteStoreGroup(workspaceIDGroup(id)); !r.OK {
+				return r
 			}
 		}
 	}
 	for slug, uuid := range c.workspaceSlugs {
 		if uuid == ws.UUID {
 			delete(c.workspaceSlugs, slug)
-			if err := c.deleteStoreGroup(workspaceSlugGroup(slug)); err != nil {
-				return err
+			if r := c.deleteStoreGroup(workspaceSlugGroup(slug)); !r.OK {
+				return r
 			}
 		}
 	}
@@ -219,20 +219,20 @@ func (c *TenantCache) SetWorkspace(ws *Workspace) error {
 	c.workspacesByUUID[ws.UUID] = cacheEntry{value: clone, expiresAt: c.now().Add(TTLWorkspace)}
 	if ws.ID != 0 {
 		c.workspaceIDs[ws.ID] = ws.UUID
-		if err := c.persistString(workspaceIDGroup(ws.ID), "uuid", ws.UUID, TTLWorkspace); err != nil {
-			return err
+		if r := c.persistString(workspaceIDGroup(ws.ID), "uuid", ws.UUID, TTLWorkspace); !r.OK {
+			return r
 		}
 	}
 	if ws.Slug != "" {
 		c.workspaceSlugs[ws.Slug] = ws.UUID
-		if err := c.persistString(workspaceSlugGroup(ws.Slug), "uuid", ws.UUID, TTLWorkspace); err != nil {
-			return err
+		if r := c.persistString(workspaceSlugGroup(ws.Slug), "uuid", ws.UUID, TTLWorkspace); !r.OK {
+			return r
 		}
 	}
-	if err := c.persistJSON(workspaceRecordGroup(ws.UUID), "data", clone, TTLWorkspace); err != nil {
-		return err
+	if r := c.persistJSON(workspaceRecordGroup(ws.UUID), "data", clone, TTLWorkspace); !r.OK {
+		return r
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 // GetWorkspace retrieves a cached workspace by UUID. Returns nil, false on miss.
@@ -253,7 +253,7 @@ func (c *TenantCache) GetWorkspace(uuid string) (*Workspace, bool) {
 		}
 		var workspace Workspace
 		if c.readJSON(workspaceRecordGroup(uuid), "data", &workspace) {
-			if err := c.SetWorkspace(&workspace); err != nil {
+			if r := c.SetWorkspace(&workspace); !r.OK {
 				return nil, false
 			}
 			return cloneWorkspace(&workspace), true
@@ -305,17 +305,17 @@ func (c *TenantCache) GetWorkspaceBySlug(slug string) (*Workspace, bool) {
 // SetPackages stores the active package list for a workspace.
 //
 //	cache.SetPackages(ws.UUID, []tenant.Package{{Code: "starter"}})
-func (c *TenantCache) SetPackages(wsUUID string, packages []Package) error {
+func (c *TenantCache) SetPackages(wsUUID string, packages []Package) core.Result {
 	if c == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.packages[wsUUID] = cacheEntry{value: clonePackages(packages), expiresAt: c.now().Add(TTLEntitlements)}
-	if err := c.persistJSON(packagesGroup(wsUUID), "data", packages, TTLEntitlements); err != nil {
-		return err
+	if r := c.persistJSON(packagesGroup(wsUUID), "data", packages, TTLEntitlements); !r.OK {
+		return r
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 // GetPackages retrieves cached packages. Returns nil, false on miss.
@@ -350,17 +350,17 @@ func (c *TenantCache) GetPackages(wsUUID string) ([]Package, bool) {
 // SetBoosts stores the active boost list for a workspace.
 //
 //	cache.SetBoosts(ws.UUID, []tenant.Boost{{FeatureCode: "pages"}})
-func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) error {
+func (c *TenantCache) SetBoosts(wsUUID string, boosts []Boost) core.Result {
 	if c == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.boosts[wsUUID] = cacheEntry{value: cloneBoosts(boosts), expiresAt: c.now().Add(TTLEntitlements)}
-	if err := c.persistJSON(boostsGroup(wsUUID), "data", boosts, TTLEntitlements); err != nil {
-		return err
+	if r := c.persistJSON(boostsGroup(wsUUID), "data", boosts, TTLEntitlements); !r.OK {
+		return r
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 // GetBoosts retrieves cached boosts. Returns nil, false on miss.
@@ -395,18 +395,18 @@ func (c *TenantCache) GetBoosts(wsUUID string) ([]Boost, bool) {
 // SetUsage stores the current usage count for a workspace+feature.
 //
 //	cache.SetUsage(ws.UUID, "pages", 7)
-func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) error {
+func (c *TenantCache) SetUsage(wsUUID, featureCode string, count int) core.Result {
 	if c == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.usage[usageCacheKey(wsUUID, featureCode)] = cacheEntry{value: count, expiresAt: c.now().Add(TTLUsage)}
-	if err := c.persistString(usageGroup(wsUUID, featureCode), "count", strconv.Itoa(count), TTLUsage); err != nil {
-		return err
+	if r := c.persistString(usageGroup(wsUUID, featureCode), "count", strconv.Itoa(count), TTLUsage); !r.OK {
+		return r
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 // GetUsage retrieves a cached usage count. Returns 0, false on miss.
@@ -443,7 +443,7 @@ func (c *TenantCache) GetUsage(wsUUID, featureCode string) (int, bool) {
 // invalidateUsage drops the cached usage counter for a workspace+feature pair.
 //
 //	c.invalidateUsage(ws.UUID, "pages")
-func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) error {
+func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) core.Result {
 	featureCode = normalizedFeatureCode(featureCode)
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -454,9 +454,9 @@ func (c *TenantCache) invalidateUsage(wsUUID, featureCode string) error {
 // InvalidateWorkspace drops all cache entries for this workspace UUID.
 //
 //	cache.InvalidateWorkspace(ws.UUID)
-func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
+func (c *TenantCache) InvalidateWorkspace(wsUUID string) core.Result {
 	if c == nil {
-		return nil
+		return core.Ok(nil)
 	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -464,18 +464,18 @@ func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
 	delete(c.workspacesByUUID, wsUUID)
 	delete(c.packages, wsUUID)
 	delete(c.boosts, wsUUID)
-	var firstErr error
-	if err := c.deleteStoreGroup(workspaceRecordGroup(wsUUID)); err != nil && firstErr == nil {
-		firstErr = err
+	first := core.Ok(nil)
+	if r := c.deleteStoreGroup(workspaceRecordGroup(wsUUID)); !r.OK && first.OK {
+		first = r
 	}
-	if err := c.deleteStoreGroup(packagesGroup(wsUUID)); err != nil && firstErr == nil {
-		firstErr = err
+	if r := c.deleteStoreGroup(packagesGroup(wsUUID)); !r.OK && first.OK {
+		first = r
 	}
-	if err := c.deleteStoreGroup(boostsGroup(wsUUID)); err != nil && firstErr == nil {
-		firstErr = err
+	if r := c.deleteStoreGroup(boostsGroup(wsUUID)); !r.OK && first.OK {
+		first = r
 	}
-	if err := c.deleteStorePrefix(usagePrefix(wsUUID)); err != nil && firstErr == nil {
-		firstErr = err
+	if r := c.deleteStorePrefix(usagePrefix(wsUUID)); !r.OK && first.OK {
+		first = r
 	}
 
 	for key := range c.usage {
@@ -486,40 +486,40 @@ func (c *TenantCache) InvalidateWorkspace(wsUUID string) error {
 	for id, uuid := range c.workspaceIDs {
 		if uuid == wsUUID {
 			delete(c.workspaceIDs, id)
-			if err := c.deleteStoreGroup(workspaceIDGroup(id)); err != nil && firstErr == nil {
-				firstErr = err
+			if r := c.deleteStoreGroup(workspaceIDGroup(id)); !r.OK && first.OK {
+				first = r
 			}
 		}
 	}
 	for slug, uuid := range c.workspaceSlugs {
 		if uuid == wsUUID {
 			delete(c.workspaceSlugs, slug)
-			if err := c.deleteStoreGroup(workspaceSlugGroup(slug)); err != nil && firstErr == nil {
-				firstErr = err
+			if r := c.deleteStoreGroup(workspaceSlugGroup(slug)); !r.OK && first.OK {
+				first = r
 			}
 		}
 	}
-	return firstErr
+	return first
 }
 
 // SetFeature stores a feature definition by code. Features are global.
 //
 //	cache.SetFeature(&tenant.Feature{Code: "pages", Type: tenant.FeatureTypeLimit})
-func (c *TenantCache) SetFeature(feature *Feature) error {
+func (c *TenantCache) SetFeature(feature *Feature) core.Result {
 	if c == nil {
-		return ErrFeatureNotFound
+		return core.Fail(ErrFeatureNotFound)
 	}
 	if feature == nil {
-		return ErrFeatureNotFound
+		return core.Fail(ErrFeatureNotFound)
 	}
 	featureCode := normalizedFeatureCode(feature.Code)
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.features[featureCode] = cacheEntry{value: cloneFeature(feature), expiresAt: c.now().Add(TTLEntitlements)}
-	if err := c.persistJSON(featureGroup(featureCode), "data", feature, TTLEntitlements); err != nil {
-		return err
+	if r := c.persistJSON(featureGroup(featureCode), "data", feature, TTLEntitlements); !r.OK {
+		return r
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 // GetFeature retrieves a cached feature definition by code.
@@ -555,23 +555,23 @@ func (c *TenantCache) GetFeature(code string) (*Feature, bool) {
 // SetUser stores the authenticated user record.
 //
 //	cache.SetUser(&tenant.User{UUID: "user-7", Email: "ada@example.uk"})
-func (c *TenantCache) SetUser(user *User) error {
+func (c *TenantCache) SetUser(user *User) core.Result {
 	if c == nil {
-		return ErrNoUserContext
+		return core.Fail(ErrNoUserContext)
 	}
 	if user == nil {
-		return ErrNoUserContext
+		return core.Fail(ErrNoUserContext)
 	}
 	if user.UUID == "" {
-		return ErrNoUserContext
+		return core.Fail(ErrNoUserContext)
 	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.users[user.UUID] = cacheEntry{value: cloneUser(user), expiresAt: c.now().Add(TTLUser)}
-	if err := c.persistJSON(userGroup(user.UUID), "data", user, TTLUser); err != nil {
-		return err
+	if r := c.persistJSON(userGroup(user.UUID), "data", user, TTLUser); !r.OK {
+		return r
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 // GetUser retrieves a cached user by UUID. Returns nil, false on miss.

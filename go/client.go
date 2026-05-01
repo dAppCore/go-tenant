@@ -3,7 +3,6 @@
 package tenant
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -17,7 +16,7 @@ import (
 // TenantClient calls the PHP REST API to read and mutate tenant data.
 //
 //	client := tenant.NewTenantClient("https://api.host.uk.com", token)
-//	ws, err := client.GetWorkspaceBySlug(ctx, "acme")
+//	r := client.GetWorkspaceBySlug(ctx, "acme")
 type TenantClient struct {
 	baseURL    string
 	token      string
@@ -59,29 +58,29 @@ func WithTimeout(d time.Duration) ClientOption {
 	}
 }
 
-func (c *TenantClient) request(ctx context.Context, method, path string, body any) ([]byte, int, error) {
+func (c *TenantClient) request(ctx context.Context, method, path string, body any) core.Result {
 	if c == nil {
-		return nil, 0, core.E("tenant", "tenant client is nil", nil)
+		return core.Fail(core.E("tenant", "tenant client is nil", nil))
 	}
 	c.ensureHTTPClient()
 	endpoint, err := url.JoinPath(c.baseURL, path)
 	if err != nil {
-		return nil, 0, core.E("tenant", "failed to build api request path", err)
+		return core.Fail(core.E("tenant", "failed to build api request path", err))
 	}
 	var payload io.Reader
 	if body != nil {
 		result := core.JSONMarshal(body)
 		if !result.OK {
 			if err, ok := result.Value.(error); ok {
-				return nil, 0, core.E("tenant", "failed to encode api request body", err)
+				return core.Fail(core.E("tenant", "failed to encode api request body", err))
 			}
-			return nil, 0, core.E("tenant", "failed to encode api request body", nil)
+			return core.Fail(core.E("tenant", "failed to encode api request body", nil))
 		}
-		payload = bytes.NewReader(result.Value.([]byte))
+		payload = core.NewBuffer(result.Value.([]byte))
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, payload)
 	if err != nil {
-		return nil, 0, core.E("tenant", "failed to create api request", err)
+		return core.Fail(core.E("tenant", "failed to create api request", err))
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
@@ -91,112 +90,112 @@ func (c *TenantClient) request(ctx context.Context, method, path string, body an
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		if err == context.DeadlineExceeded || core.Contains(err.Error(), context.DeadlineExceeded.Error()) || core.Contains(err.Error(), "timeout") {
-			return nil, 0, ErrClientTimeout
+			return core.Fail(ErrClientTimeout)
 		}
-		return nil, 0, core.E("tenant", "api request failed", err)
+		return core.Fail(core.E("tenant", "api request failed", err))
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, core.E("tenant", "failed to read api response", err)
+		return core.Fail(core.E("tenant", "failed to read api response", err))
 	}
 	if resp.StatusCode >= 400 {
 		if len(data) == 0 {
-			return nil, resp.StatusCode, c.statusError(resp.StatusCode, path, "")
+			return c.statusError(resp.StatusCode, path, "")
 		}
-		return nil, resp.StatusCode, c.statusError(resp.StatusCode, path, string(data))
+		return c.statusError(resp.StatusCode, path, string(data))
 	}
-	return data, resp.StatusCode, nil
+	return core.Ok(data)
 }
 
-func (c *TenantClient) statusError(status int, path, body string) error {
+func (c *TenantClient) statusError(status int, path, body string) core.Result {
 	if status == http.StatusNotFound {
 		if core.Contains(path, "/features/") {
-			return ErrFeatureNotFound
+			return core.Fail(ErrFeatureNotFound)
 		}
-		return ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
 	if body != "" {
 		var envelope map[string]any
 		if core.JSONUnmarshalString(body, &envelope).OK {
 			if message := stringField(envelope, "error"); message != "" {
-				return core.E("tenant", message, nil)
+				return core.Fail(core.E("tenant", message, nil))
 			}
 		}
 	}
-	return core.E("tenant", http.StatusText(status), nil)
+	return core.Fail(core.E("tenant", http.StatusText(status), nil))
 }
 
 // decodeEnvelope decodes a PHP API response, handling both envelope and direct JSON formats.
 // Envelope format: {"ok": true, "data": ...} or {"ok": false, "error": "message"}.
 //
 //	var workspace Workspace
-//	decodeEnvelope(responseBytes, &workspace)
-func decodeEnvelope(data []byte, target any) error {
+//	r := decodeEnvelope(responseBytes, &workspace)
+func decodeEnvelope(data []byte, target any) core.Result {
 	if len(data) == 0 {
-		return io.EOF
+		return core.Fail(io.EOF)
 	}
 	payload := string(data)
 	var envelope map[string]any
 	if core.JSONUnmarshalString(payload, &envelope).OK && looksLikeEnvelope(envelope) {
 		if message := stringField(envelope, "error"); message != "" && !boolField(envelope, "ok") {
-			return core.E("tenant", message, nil)
+			return core.Fail(core.E("tenant", message, nil))
 		}
 		if nested, ok := envelope["data"]; ok && nested != nil {
 			nestedResult := core.JSONMarshal(nested)
 			if !nestedResult.OK {
-				return core.E("tenant", "invalid api payload", nil)
+				return core.Fail(core.E("tenant", "invalid api payload", nil))
 			}
 			nestedJSON := string(nestedResult.Value.([]byte))
 			if result := core.JSONUnmarshalString(nestedJSON, target); result.OK {
-				return nil
+				return core.Ok(target)
 			}
-			return core.E("tenant", "invalid api payload", nil)
+			return core.Fail(core.E("tenant", "invalid api payload", nil))
 		}
 	}
 	if result := core.JSONUnmarshalString(payload, target); result.OK {
-		return nil
+		return core.Ok(target)
 	}
-	return core.E("tenant", "invalid api payload", nil)
+	return core.Fail(core.E("tenant", "invalid api payload", nil))
 }
 
 // decodeCount extracts a numeric count from a PHP API response.
 // Supports envelope format ({"count": N}), direct integer, and string representations.
 //
-//	count, err := decodeCount([]byte(`{"ok":true,"count":7}`))  // 7, nil
-//	count, err := decodeCount([]byte(`42`))                     // 42, nil
-func decodeCount(data []byte) (int, error) {
+//	r := decodeCount([]byte(`{"ok":true,"count":7}`))  // Value is 7
+//	r := decodeCount([]byte(`42`))                     // Value is 42
+func decodeCount(data []byte) core.Result {
 	if len(data) == 0 {
-		return 0, io.EOF
+		return core.Fail(io.EOF)
 	}
 	payload := string(data)
 	var envelope map[string]any
 	if core.JSONUnmarshalString(payload, &envelope).OK && looksLikeEnvelope(envelope) {
 		if message := stringField(envelope, "error"); message != "" && !boolField(envelope, "ok") {
-			return 0, core.E("tenant", message, nil)
+			return core.Fail(core.E("tenant", message, nil))
 		}
 		for _, key := range []string{"count", "usage", "value"} {
 			if count, ok := intField(envelope, key); ok {
-				return count, nil
+				return core.Ok(count)
 			}
 		}
 		if nested, ok := envelope["data"]; ok && nested != nil {
 			nestedResult := core.JSONMarshal(nested)
 			if !nestedResult.OK {
-				return 0, core.E("tenant", "invalid count payload", nil)
+				return core.Fail(core.E("tenant", "invalid count payload", nil))
 			}
 			return decodeCount(nestedResult.Value.([]byte))
 		}
 	}
 	if value, err := strconv.Atoi(core.Trim(payload)); err == nil {
-		return value, nil
+		return core.Ok(value)
 	}
 	var direct int
 	if result := core.JSONUnmarshalString(payload, &direct); result.OK {
-		return direct, nil
+		return core.Ok(direct)
 	}
-	return 0, core.E("tenant", "invalid count payload", nil)
+	return core.Fail(core.E("tenant", "invalid count payload", nil))
 }
 
 func (c *TenantClient) ensureHTTPClient() {
@@ -215,153 +214,152 @@ func (c *TenantClient) ensureHTTPClient() {
 
 // GetWorkspaceBySlug fetches a workspace by its slug.
 //
-//	workspace, err := client.GetWorkspaceBySlug(ctx, "acme")
-func (c *TenantClient) GetWorkspaceBySlug(ctx context.Context, slug string) (*Workspace, error) {
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(slug), nil)
-	if err != nil {
-		return nil, err
+//	r := client.GetWorkspaceBySlug(ctx, "acme")
+func (c *TenantClient) GetWorkspaceBySlug(ctx context.Context, slug string) core.Result {
+	r := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(slug), nil)
+	if !r.OK {
+		return r
 	}
 	var workspace Workspace
-	if err := decodeEnvelope(data, &workspace); err != nil {
-		return nil, err
+	if decoded := decodeEnvelope(r.Value.([]byte), &workspace); !decoded.OK {
+		return decoded
 	}
-	return &workspace, nil
+	return core.Ok(&workspace)
 }
 
 // GetWorkspaceByUUID fetches a workspace by UUID.
 //
 //	workspace, err := client.GetWorkspaceByUUID(ctx, "550e8400-...")
-func (c *TenantClient) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspace, error) {
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/uuid/"+url.PathEscape(uuid), nil)
-	if err != nil {
-		return nil, err
+func (c *TenantClient) GetWorkspaceByUUID(ctx context.Context, uuid string) core.Result {
+	r := c.request(ctx, http.MethodGet, "/api/v1/workspaces/uuid/"+url.PathEscape(uuid), nil)
+	if !r.OK {
+		return r
 	}
 	var workspace Workspace
-	if err := decodeEnvelope(data, &workspace); err != nil {
-		return nil, err
+	if decoded := decodeEnvelope(r.Value.([]byte), &workspace); !decoded.OK {
+		return decoded
 	}
-	return &workspace, nil
+	return core.Ok(&workspace)
 }
 
 // GetWorkspaceByID fetches a workspace by integer ID.
 //
 //	workspace, err := client.GetWorkspaceByID(ctx, 42)
-func (c *TenantClient) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, error) {
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/id/"+strconv.FormatInt(id, 10), nil)
-	if err != nil {
-		return nil, err
+func (c *TenantClient) GetWorkspaceByID(ctx context.Context, id int64) core.Result {
+	r := c.request(ctx, http.MethodGet, "/api/v1/workspaces/id/"+strconv.FormatInt(id, 10), nil)
+	if !r.OK {
+		return r
 	}
 	var workspace Workspace
-	if err := decodeEnvelope(data, &workspace); err != nil {
-		return nil, err
+	if decoded := decodeEnvelope(r.Value.([]byte), &workspace); !decoded.OK {
+		return decoded
 	}
-	return &workspace, nil
+	return core.Ok(&workspace)
 }
 
 // GetWorkspaceBySubdomain resolves a hostname to a workspace.
 // It checks the slug first, then falls back to the domain-prefix endpoint.
 //
 //	workspace, err := tenantClient.GetWorkspaceBySubdomain(ctx, "acme.host.uk.com")
-func (c *TenantClient) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
+func (c *TenantClient) GetWorkspaceBySubdomain(ctx context.Context, host string) core.Result {
 	if slug := workspaceSlugFromHost(host); slug != "" {
-		if workspace, err := c.GetWorkspaceBySlug(ctx, slug); err == nil {
-			return workspace, nil
-		} else if err != ErrWorkspaceNotFound {
-			return nil, err
+		if r := c.GetWorkspaceBySlug(ctx, slug); r.OK {
+			return r
+		} else if r.Value != ErrWorkspaceNotFound {
+			return r
 		}
 	}
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/subdomain/"+url.PathEscape(host), nil)
-	if err != nil {
-		return nil, err
+	r := c.request(ctx, http.MethodGet, "/api/v1/workspaces/subdomain/"+url.PathEscape(host), nil)
+	if !r.OK {
+		return r
 	}
 	var workspace Workspace
-	if err := decodeEnvelope(data, &workspace); err != nil {
-		return nil, err
+	if decoded := decodeEnvelope(r.Value.([]byte), &workspace); !decoded.OK {
+		return decoded
 	}
-	return &workspace, nil
+	return core.Ok(&workspace)
 }
 
 // GetUser fetches the authenticated user by the bearer token on the client.
 //
 //	user, err := client.GetUser(ctx)
-func (c *TenantClient) GetUser(ctx context.Context) (*User, error) {
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/user", nil)
-	if err != nil {
-		return nil, err
+func (c *TenantClient) GetUser(ctx context.Context) core.Result {
+	r := c.request(ctx, http.MethodGet, "/api/v1/user", nil)
+	if !r.OK {
+		return r
 	}
 	var user User
-	if err := decodeEnvelope(data, &user); err != nil {
-		return nil, err
+	if decoded := decodeEnvelope(r.Value.([]byte), &user); !decoded.OK {
+		return decoded
 	}
-	return &user, nil
+	return core.Ok(&user)
 }
 
 // GetPackagesForWorkspace returns all active packages assigned to the workspace.
 //
 //	packages, err := client.GetPackagesForWorkspace(ctx, ws.UUID)
-func (c *TenantClient) GetPackagesForWorkspace(ctx context.Context, wsUUID string) ([]Package, error) {
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/packages", nil)
-	if err != nil {
-		return nil, err
+func (c *TenantClient) GetPackagesForWorkspace(ctx context.Context, wsUUID string) core.Result {
+	r := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/packages", nil)
+	if !r.OK {
+		return r
 	}
 	var packages []Package
-	if err := decodeEnvelope(data, &packages); err != nil {
-		return nil, err
+	if decoded := decodeEnvelope(r.Value.([]byte), &packages); !decoded.OK {
+		return decoded
 	}
-	return packages, nil
+	return core.Ok(packages)
 }
 
 // GetBoostsForWorkspace returns all active, usable boosts for the workspace.
 //
 //	boosts, err := client.GetBoostsForWorkspace(ctx, ws.UUID)
-func (c *TenantClient) GetBoostsForWorkspace(ctx context.Context, wsUUID string) ([]Boost, error) {
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/boosts", nil)
-	if err != nil {
-		return nil, err
+func (c *TenantClient) GetBoostsForWorkspace(ctx context.Context, wsUUID string) core.Result {
+	r := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/boosts", nil)
+	if !r.OK {
+		return r
 	}
 	var boosts []Boost
-	if err := decodeEnvelope(data, &boosts); err != nil {
-		return nil, err
+	if decoded := decodeEnvelope(r.Value.([]byte), &boosts); !decoded.OK {
+		return decoded
 	}
-	return boosts, nil
+	return core.Ok(boosts)
 }
 
 // GetCurrentUsage returns total usage count for wsUUID+featureCode since reset boundary.
 //
 //	used, err := client.GetCurrentUsage(ctx, ws.UUID, "pages")
-func (c *TenantClient) GetCurrentUsage(ctx context.Context, wsUUID, featureCode string) (int, error) {
+func (c *TenantClient) GetCurrentUsage(ctx context.Context, wsUUID, featureCode string) core.Result {
 	featureCode = normalizedFeatureCode(featureCode)
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/usage/"+url.PathEscape(featureCode), nil)
-	if err != nil {
-		return 0, err
+	r := c.request(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/usage/"+url.PathEscape(featureCode), nil)
+	if !r.OK {
+		return r
 	}
-	return decodeCount(data)
+	return decodeCount(r.Value.([]byte))
 }
 
 // RecordUsage POSTs a usage record to the PHP API.
 //
 //	err := client.RecordUsage(ctx, ws.UUID, "pages", 1, &userID, nil)
-func (c *TenantClient) RecordUsage(ctx context.Context, wsUUID, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
+func (c *TenantClient) RecordUsage(ctx context.Context, wsUUID, featureCode string, quantity int, userID *int64, metadata map[string]any) core.Result {
 	record := newUsageRecord(0, featureCode, quantity, userID, metadata)
 	payload := record.payload()
-	_, _, err := c.request(ctx, http.MethodPost, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/usage", payload)
-	return err
+	return c.request(ctx, http.MethodPost, "/api/v1/workspaces/"+url.PathEscape(wsUUID)+"/usage", payload)
 }
 
 // GetFeature fetches a single feature definition by code.
 //
 //	feature, err := tenantClient.GetFeature(ctx, "pages")
-func (c *TenantClient) GetFeature(ctx context.Context, code string) (*Feature, error) {
+func (c *TenantClient) GetFeature(ctx context.Context, code string) core.Result {
 	code = normalizedFeatureCode(code)
-	data, _, err := c.request(ctx, http.MethodGet, "/api/v1/features/"+url.PathEscape(code), nil)
-	if err != nil {
-		return nil, err
+	r := c.request(ctx, http.MethodGet, "/api/v1/features/"+url.PathEscape(code), nil)
+	if !r.OK {
+		return r
 	}
 	var feature Feature
-	if err := decodeEnvelope(data, &feature); err != nil {
-		return nil, err
+	if decoded := decodeEnvelope(r.Value.([]byte), &feature); !decoded.OK {
+		return decoded
 	}
-	return &feature, nil
+	return core.Ok(&feature)
 }
 
 // workspaceSlugFromHost extracts the subdomain slug from a hostname.

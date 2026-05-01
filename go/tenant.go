@@ -136,144 +136,150 @@ func coreConfigDurationValue(c *core.Core, keys ...string) time.Duration {
 
 // GetWorkspace resolves a workspace by slug. Checks cache first, then PHP API.
 //
-//	ws, err := ten.GetWorkspace(ctx, "acme")
-func (tenantService *Tenant) GetWorkspace(ctx context.Context, slug string) (*Workspace, error) {
+//	r := ten.GetWorkspace(ctx, "acme")
+func (tenantService *Tenant) GetWorkspace(ctx context.Context, slug string) core.Result {
 	if tenantService == nil {
-		return nil, ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
 	if tenantService.cache != nil {
 		if workspace, ok := tenantService.cache.GetWorkspaceBySlug(slug); ok {
-			return workspace, nil
+			return core.Ok(workspace)
 		}
 	}
 	if tenantService.client == nil {
-		return nil, ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
-	workspace, err := tenantService.client.GetWorkspaceBySlug(ctx, slug)
-	if err != nil {
-		return nil, err
+	r := tenantService.client.GetWorkspaceBySlug(ctx, slug)
+	if !r.OK {
+		return r
 	}
+	workspace := r.Value.(*Workspace)
 	if tenantService.cache != nil {
-		if err := tenantService.cache.SetWorkspace(workspace); err != nil {
-			return nil, err
+		if cached := tenantService.cache.SetWorkspace(workspace); !cached.OK {
+			return cached
 		}
 	}
-	return workspace, nil
+	return core.Ok(workspace)
 }
 
 // GetWorkspaceByUUID resolves a workspace by UUID.
 //
 //	ws, err := ten.GetWorkspaceByUUID(ctx, "550e8400-...")
-func (tenantService *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string) (*Workspace, error) {
+func (tenantService *Tenant) GetWorkspaceByUUID(ctx context.Context, uuid string) core.Result {
 	if tenantService == nil {
-		return nil, ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
 	if tenantService.cache != nil {
 		if workspace, ok := tenantService.cache.GetWorkspace(uuid); ok {
-			return workspace, nil
+			return core.Ok(workspace)
 		}
 	}
 	if tenantService.client == nil {
-		return nil, ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
-	workspace, err := tenantService.client.GetWorkspaceByUUID(ctx, uuid)
-	if err != nil {
-		return nil, err
+	r := tenantService.client.GetWorkspaceByUUID(ctx, uuid)
+	if !r.OK {
+		return r
 	}
+	workspace := r.Value.(*Workspace)
 	if tenantService.cache != nil {
-		if err := tenantService.cache.SetWorkspace(workspace); err != nil {
-			return nil, err
+		if cached := tenantService.cache.SetWorkspace(workspace); !cached.OK {
+			return cached
 		}
 	}
-	return workspace, nil
+	return core.Ok(workspace)
 }
 
 // GetWorkspaceByID resolves a workspace by integer ID.
 //
 //	ws, err := ten.GetWorkspaceByID(ctx, 42)
-func (tenantService *Tenant) GetWorkspaceByID(ctx context.Context, id int64) (*Workspace, error) {
+func (tenantService *Tenant) GetWorkspaceByID(ctx context.Context, id int64) core.Result {
 	if tenantService == nil {
-		return nil, ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
 	if tenantService.cache != nil {
 		if workspace, ok := tenantService.cache.GetWorkspaceByID(id); ok {
-			return workspace, nil
+			return core.Ok(workspace)
 		}
 	}
 	if tenantService.client == nil {
-		return nil, ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
-	workspace, err := tenantService.client.GetWorkspaceByID(ctx, id)
-	if err != nil {
-		return nil, err
+	r := tenantService.client.GetWorkspaceByID(ctx, id)
+	if !r.OK {
+		return r
 	}
+	workspace := r.Value.(*Workspace)
 	if tenantService.cache != nil {
-		if err := tenantService.cache.SetWorkspace(workspace); err != nil {
-			return nil, err
+		if cached := tenantService.cache.SetWorkspace(workspace); !cached.OK {
+			return cached
 		}
 	}
-	return workspace, nil
+	return core.Ok(workspace)
 }
 
 // GetUser resolves the authenticated user for ctx.
 //
 //	user, err := ten.GetUser(ctx)
-func (tenantService *Tenant) GetUser(ctx context.Context) (*User, error) {
+func (tenantService *Tenant) GetUser(ctx context.Context) core.Result {
 	if tenantService == nil {
-		return nil, ErrNoUserContext
+		return core.Fail(ErrNoUserContext)
 	}
-	if user, err := UserFromCtx(ctx); err == nil && user != nil {
+	if userResult := UserFromCtx(ctx); userResult.OK && userResult.Value != nil {
+		user := userResult.Value.(*User)
 		if tenantService.cache != nil {
 			if cached, ok := tenantService.cache.GetUser(user.UUID); ok {
-				return cached, nil
+				return core.Ok(cached)
 			}
-			if err := tenantService.cache.SetUser(user); err != nil {
-				return nil, err
+			if cached := tenantService.cache.SetUser(user); !cached.OK {
+				return cached
 			}
 		}
-		return cloneUser(user), nil
+		return core.Ok(cloneUser(user))
 	}
 	if tenantService.client == nil {
-		return nil, ErrNoUserContext
+		return core.Fail(ErrNoUserContext)
 	}
-	user, err := tenantService.client.GetUser(ctx)
-	if err != nil {
-		return nil, err
+	r := tenantService.client.GetUser(ctx)
+	if !r.OK {
+		return r
 	}
+	user := r.Value.(*User)
 	if tenantService.cache != nil {
-		if err := tenantService.cache.SetUser(user); err != nil {
-			return nil, err
+		if cached := tenantService.cache.SetUser(user); !cached.OK {
+			return cached
 		}
 	}
-	return user, nil
+	return core.Ok(user)
 }
 
 // GetWorkspaceBySubdomain resolves the workspace for an incoming hostname.
 //
 //	workspace, err := tenantService.GetWorkspaceBySubdomain(ctx, "acme.host.uk.com")
-func (tenantService *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) (*Workspace, error) {
+func (tenantService *Tenant) GetWorkspaceBySubdomain(ctx context.Context, host string) core.Result {
 	if tenantService == nil {
-		return nil, ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
 	slug := workspaceSlugFromHost(host)
 	if slug != "" {
-		if workspace, err := tenantService.GetWorkspace(ctx, slug); err == nil {
-			return workspace, nil
+		if r := tenantService.GetWorkspace(ctx, slug); r.OK {
+			return r
 		}
 	}
 	if tenantService.client == nil {
-		return nil, ErrWorkspaceNotFound
+		return core.Fail(ErrWorkspaceNotFound)
 	}
-	workspace, err := tenantService.client.GetWorkspaceBySubdomain(ctx, host)
-	if err != nil {
-		return nil, err
+	r := tenantService.client.GetWorkspaceBySubdomain(ctx, host)
+	if !r.OK {
+		return r
 	}
+	workspace := r.Value.(*Workspace)
 	if tenantService.cache != nil {
-		if err := tenantService.cache.SetWorkspace(workspace); err != nil {
-			return nil, err
+		if cached := tenantService.cache.SetWorkspace(workspace); !cached.OK {
+			return cached
 		}
 	}
-	return workspace, nil
+	return core.Ok(workspace)
 }
 
 // Can checks whether ws can consume quantity units of featureCode.
@@ -292,27 +298,27 @@ func (tenantService *Tenant) Can(ctx context.Context, ws *Workspace, featureCode
 // RecordUsage records feature consumption for ws after a successful operation.
 //
 //	tenantService.RecordUsage(ctx, workspace, "pages", 1, &userID, nil)
-func (tenantService *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
+func (tenantService *Tenant) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) core.Result {
 	if tenantService == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	if tenantService.entitlements == nil {
 		tenantService.entitlements = NewLocalEntitlementService(tenantService.cache, tenantService.client)
 	}
-	if err := tenantService.entitlements.RecordUsage(ctx, ws, featureCode, quantity, userID, metadata); err != nil {
-		return err
+	if r := tenantService.entitlements.RecordUsage(ctx, ws, featureCode, quantity, userID, metadata); !r.OK {
+		return r
 	}
 	result := tenantService.Can(ctx, ws, featureCode, 0)
 	tenantService.CheckUsageAlerts(ws, featureCode, result)
-	return nil
+	return core.Ok(nil)
 }
 
 // GetUsageSummary returns all features with their current usage for ws.
 //
 //	items, err := tenantService.GetUsageSummary(ctx, workspace)
-func (tenantService *Tenant) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error) {
+func (tenantService *Tenant) GetUsageSummary(ctx context.Context, ws *Workspace) core.Result {
 	if tenantService == nil {
-		return nil, ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	if tenantService.entitlements == nil {
 		tenantService.entitlements = NewLocalEntitlementService(tenantService.cache, tenantService.client)
@@ -331,7 +337,7 @@ func (tenantService *Tenant) InvalidateWorkspace(wsUUID string) {
 		tenantService.entitlements.InvalidateWorkspace(wsUUID)
 	}
 	if tenantService.cache != nil {
-		if err := tenantService.cache.InvalidateWorkspace(wsUUID); err != nil {
+		if r := tenantService.cache.InvalidateWorkspace(wsUUID); !r.OK {
 			return
 		}
 	}
