@@ -5,6 +5,8 @@ package tenant
 import (
 	"context"
 	"net/http"
+
+	"dappco.re/go"
 )
 
 // WorkspaceScope resolves and injects workspace context for HTTP handlers.
@@ -47,7 +49,8 @@ func (s *WorkspaceScope) WithStrict(strict bool) *WorkspaceScope {
 func (s *WorkspaceScope) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			workspace, _ := s.resolveWorkspace(r)
+			result := s.resolveWorkspace(r)
+			workspace, _ := core.Cast[*Workspace](result)
 			if workspace == nil {
 				if s.strict {
 					http.Error(w, "workspace required", http.StatusUnauthorized)
@@ -69,7 +72,7 @@ func (s *WorkspaceScope) Middleware() func(http.Handler) http.Handler {
 func (s *WorkspaceScope) RequireWorkspace() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, err := WorkspaceFromCtx(r.Context()); err != nil {
+			if result := WorkspaceFromCtx(r.Context()); !result.OK {
 				http.Error(w, "workspace required", http.StatusUnauthorized)
 				return
 			}
@@ -82,64 +85,65 @@ func (s *WorkspaceScope) RequireWorkspace() func(http.Handler) http.Handler {
 // It resolves a workspace by slug, injects it into ctx, then runs fn.
 // Returns ErrNoWorkspaceContext if the slug cannot be resolved.
 //
-//	err := scope.ScopeFunc(ctx, "acme", func(ctx context.Context) error {
-//	    ws, _ := tenant.WorkspaceFromCtx(ctx)
+//	r := scope.ScopeFunc(ctx, "acme", func(ctx context.Context) core.Result {
+//	    ws := tenant.WorkspaceFromCtx(ctx).Value.(*tenant.Workspace)
 //	    return ten.Can(ctx, ws, "pages", 1).AsError()
 //	})
-func (s *WorkspaceScope) ScopeFunc(ctx context.Context, slug string, fn func(context.Context) error) error {
+func (s *WorkspaceScope) ScopeFunc(ctx context.Context, slug string, fn func(context.Context) core.Result) core.Result {
 	if s == nil || s.tenant == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
-	workspace, err := s.tenant.GetWorkspace(ctx, slug)
-	if err != nil {
-		if err == ErrWorkspaceNotFound {
-			return ErrNoWorkspaceContext
+	r := s.tenant.GetWorkspace(ctx, slug)
+	if !r.OK {
+		if r.Value == ErrWorkspaceNotFound {
+			return core.Fail(ErrNoWorkspaceContext)
 		}
-		return err
+		return r
 	}
+	workspace := r.Value.(*Workspace)
 	if workspace == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	requestContext := WorkspaceContext{Context: ctx}.WithWorkspace(workspace)
 	return fn(requestContext.Context)
 }
 
-func (s *WorkspaceScope) resolveWorkspace(r *http.Request) (*Workspace, error) {
+func (s *WorkspaceScope) resolveWorkspace(r *http.Request) core.Result {
 	if s == nil || s.tenant == nil || r == nil {
-		return nil, ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	if idValue := r.Header.Get("X-Workspace-ID"); idValue != "" {
-		if id, err := parseInt64(idValue); err == nil {
-			return s.tenant.GetWorkspaceByID(r.Context(), id)
+		if parsed := parseInt64(idValue); parsed.OK {
+			return s.tenant.GetWorkspaceByID(r.Context(), parsed.Value.(int64))
 		}
-		return nil, ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	if slug := r.Header.Get("X-Workspace-Slug"); slug != "" {
 		return s.tenant.GetWorkspace(r.Context(), slug)
 	}
 	if r.Host != "" {
-		if workspace, err := s.tenant.GetWorkspaceBySubdomain(r.Context(), r.Host); err == nil && workspace != nil {
-			return workspace, nil
+		if result := s.tenant.GetWorkspaceBySubdomain(r.Context(), r.Host); result.OK && result.Value != nil {
+			return result
 		}
 	}
 	if slug := r.URL.Query().Get("workspace"); slug != "" {
 		return s.tenant.GetWorkspace(r.Context(), slug)
 	}
-	return nil, ErrNoWorkspaceContext
+	return core.Fail(ErrNoWorkspaceContext)
 }
 
 // parseInt64 parses a decimal string to int64 without importing strconv.
 // Only accepts digit characters — no signs, whitespace, or other formatting.
 //
-//	parseInt64("42")     // 42, nil
-//	parseInt64("bogus")  // 0, ErrNoWorkspaceContext
-func parseInt64(value string) (int64, error) {
+//	parseInt64("42")     // Value is int64(42)
+//	parseInt64("bogus")  // failed Result
+func parseInt64(value string) core.Result {
 	var result int64
 	for _, r := range value {
 		if r < '0' || r > '9' {
-			return 0, ErrNoWorkspaceContext
+			return core.Fail(ErrNoWorkspaceContext)
 		}
 		result = result*10 + int64(r-'0')
 	}
-	return result, nil
+	return core.Ok(result)
 }

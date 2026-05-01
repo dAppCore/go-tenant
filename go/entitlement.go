@@ -5,6 +5,8 @@ package tenant
 import (
 	"context"
 	"sort"
+
+	"dappco.re/go"
 )
 
 // EntitlementResult is the value object returned by every entitlement check.
@@ -61,12 +63,12 @@ func (r EntitlementResult) IsAtLimit() bool {
 // AsError converts to nil (allowed) or ErrEntitlementDenied (denied).
 // Convenience for callers that want to treat denial as an error.
 //
-//	if err := svc.Can(ctx, ws, "pages", 1).AsError(); err != nil { return err }
-func (r EntitlementResult) AsError() error {
+//	if r := svc.Can(ctx, ws, "pages", 1).AsError(); !r.OK { return r }
+func (r EntitlementResult) AsError() core.Result {
 	if r.Allowed {
-		return nil
+		return core.Ok(nil)
 	}
-	return ErrEntitlementDenied
+	return core.Fail(ErrEntitlementDenied)
 }
 
 // Allow constructs an allowed result with usage context.
@@ -120,12 +122,12 @@ type EntitlementService interface {
 	// Invalidates the usage cache entry for this workspace+feature.
 	//
 	//   svc.RecordUsage(ctx, ws, "pages", 1, &userID, map[string]any{"page_id": 42})
-	RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error
+	RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) core.Result
 
 	// GetUsageSummary returns all tracked features with current usage for ws.
 	//
 	//   summary, _ := svc.GetUsageSummary(ctx, ws)
-	GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error)
+	GetUsageSummary(ctx context.Context, ws *Workspace) core.Result
 
 	// InvalidateWorkspace drops all cached entitlement data for ws.
 	//
@@ -166,10 +168,11 @@ func (entitlementService *localEntitlementService) Can(ctx context.Context, ws *
 	if quantity < 0 {
 		quantity = 1
 	}
-	feature, err := entitlementService.loadFeature(ctx, featureCode)
-	if err != nil {
-		return Deny(featureCode, err.Error(), nil, nil)
+	featureResult := entitlementService.loadFeature(ctx, featureCode)
+	if !featureResult.OK {
+		return Deny(featureCode, featureResult.Error(), nil, nil)
 	}
+	feature := featureResult.Value.(*Feature)
 	poolCode := normalizedFeatureCode(feature.PoolCode())
 	packages, _ := entitlementService.loadPackages(ctx, ws.UUID)
 	boosts, _ := entitlementService.loadBoosts(ctx, ws.UUID)
@@ -229,45 +232,46 @@ func (entitlementService *localEntitlementService) Can(ctx context.Context, ws *
 	return Allow(featureCode, &packageLimit.Limit, &used)
 }
 
-func (entitlementService *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) error {
+func (entitlementService *localEntitlementService) RecordUsage(ctx context.Context, ws *Workspace, featureCode string, quantity int, userID *int64, metadata map[string]any) core.Result {
 	featureCode = normalizedFeatureCode(featureCode)
 	if ws == nil {
-		return ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	if quantity <= 0 {
 		quantity = 1
 	}
-	feature, err := entitlementService.loadFeature(ctx, featureCode)
-	if err != nil {
-		return err
+	featureResult := entitlementService.loadFeature(ctx, featureCode)
+	if !featureResult.OK {
+		return featureResult
 	}
+	feature := featureResult.Value.(*Feature)
 	poolCode := normalizedFeatureCode(feature.PoolCode())
 	if entitlementService.client != nil {
-		if err := entitlementService.client.RecordUsage(ctx, ws.UUID, featureCode, quantity, userID, metadata); err != nil {
-			return err
+		if r := entitlementService.client.RecordUsage(ctx, ws.UUID, featureCode, quantity, userID, metadata); !r.OK {
+			return r
 		}
 	}
 	if entitlementService.cache != nil {
 		if entitlementService.client != nil {
-			if err := entitlementService.cache.invalidateUsage(ws.UUID, poolCode); err != nil {
-				return err
+			if r := entitlementService.cache.invalidateUsage(ws.UUID, poolCode); !r.OK {
+				return r
 			}
 		} else if used, ok := entitlementService.cache.GetUsage(ws.UUID, poolCode); ok {
-			if err := entitlementService.cache.SetUsage(ws.UUID, poolCode, used+quantity); err != nil {
-				return err
+			if r := entitlementService.cache.SetUsage(ws.UUID, poolCode, used+quantity); !r.OK {
+				return r
 			}
 		} else {
-			if err := entitlementService.cache.SetUsage(ws.UUID, poolCode, quantity); err != nil {
-				return err
+			if r := entitlementService.cache.SetUsage(ws.UUID, poolCode, quantity); !r.OK {
+				return r
 			}
 		}
 	}
-	return nil
+	return core.Ok(nil)
 }
 
-func (entitlementService *localEntitlementService) GetUsageSummary(ctx context.Context, ws *Workspace) ([]UsageSummaryItem, error) {
+func (entitlementService *localEntitlementService) GetUsageSummary(ctx context.Context, ws *Workspace) core.Result {
 	if ws == nil {
-		return nil, ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	codes := map[string]struct{}{}
 	packages, _ := entitlementService.loadPackages(ctx, ws.UUID)
@@ -286,7 +290,7 @@ func (entitlementService *localEntitlementService) GetUsageSummary(ctx context.C
 
 	items := make([]UsageSummaryItem, 0, len(codes))
 	for code := range codes {
-		feature, _ := entitlementService.loadFeature(ctx, code)
+		feature, _ := core.Cast[*Feature](entitlementService.loadFeature(ctx, code))
 		if feature == nil {
 			feature = &Feature{Code: code, Name: code}
 		}
@@ -311,37 +315,38 @@ func (entitlementService *localEntitlementService) GetUsageSummary(ctx context.C
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].FeatureCode < items[j].FeatureCode
 	})
-	return items, nil
+	return core.Ok(items)
 }
 
 func (entitlementService *localEntitlementService) InvalidateWorkspace(wsUUID string) {
 	if entitlementService.cache != nil {
-		if err := entitlementService.cache.InvalidateWorkspace(wsUUID); err != nil {
+		if r := entitlementService.cache.InvalidateWorkspace(wsUUID); !r.OK {
 			return
 		}
 	}
 }
 
-func (entitlementService *localEntitlementService) loadFeature(ctx context.Context, code string) (*Feature, error) {
+func (entitlementService *localEntitlementService) loadFeature(ctx context.Context, code string) core.Result {
 	code = normalizedFeatureCode(code)
 	if entitlementService.cache != nil {
 		if feature, ok := entitlementService.cache.GetFeature(code); ok {
-			return feature, nil
+			return core.Ok(feature)
 		}
 	}
 	if entitlementService.client == nil {
-		return nil, ErrFeatureNotFound
+		return core.Fail(ErrFeatureNotFound)
 	}
-	feature, err := entitlementService.client.GetFeature(ctx, code)
-	if err != nil {
-		return nil, err
+	r := entitlementService.client.GetFeature(ctx, code)
+	if !r.OK {
+		return r
 	}
+	feature := r.Value.(*Feature)
 	if entitlementService.cache != nil {
-		if err := entitlementService.cache.SetFeature(feature); err != nil {
-			return nil, err
+		if cached := entitlementService.cache.SetFeature(feature); !cached.OK {
+			return cached
 		}
 	}
-	return feature, nil
+	return core.Ok(feature)
 }
 
 func (entitlementService *localEntitlementService) loadPackages(ctx context.Context, wsUUID string) ([]Package, bool) {
@@ -353,12 +358,13 @@ func (entitlementService *localEntitlementService) loadPackages(ctx context.Cont
 	if entitlementService.client == nil {
 		return nil, false
 	}
-	packages, err := entitlementService.client.GetPackagesForWorkspace(ctx, wsUUID)
-	if err != nil {
+	r := entitlementService.client.GetPackagesForWorkspace(ctx, wsUUID)
+	if !r.OK {
 		return nil, false
 	}
+	packages := r.Value.([]Package)
 	if entitlementService.cache != nil {
-		if err := entitlementService.cache.SetPackages(wsUUID, packages); err != nil {
+		if cached := entitlementService.cache.SetPackages(wsUUID, packages); !cached.OK {
 			return nil, false
 		}
 	}
@@ -374,12 +380,13 @@ func (entitlementService *localEntitlementService) loadBoosts(ctx context.Contex
 	if entitlementService.client == nil {
 		return nil, false
 	}
-	boosts, err := entitlementService.client.GetBoostsForWorkspace(ctx, wsUUID)
-	if err != nil {
+	r := entitlementService.client.GetBoostsForWorkspace(ctx, wsUUID)
+	if !r.OK {
 		return nil, false
 	}
+	boosts := r.Value.([]Boost)
 	if entitlementService.cache != nil {
-		if err := entitlementService.cache.SetBoosts(wsUUID, boosts); err != nil {
+		if cached := entitlementService.cache.SetBoosts(wsUUID, boosts); !cached.OK {
 			return nil, false
 		}
 	}
@@ -396,12 +403,13 @@ func (entitlementService *localEntitlementService) loadUsage(ctx context.Context
 	if entitlementService.client == nil {
 		return 0, false
 	}
-	used, err := entitlementService.client.GetCurrentUsage(ctx, wsUUID, featureCode)
-	if err != nil {
+	r := entitlementService.client.GetCurrentUsage(ctx, wsUUID, featureCode)
+	if !r.OK {
 		return 0, false
 	}
+	used := r.Value.(int)
 	if entitlementService.cache != nil {
-		if err := entitlementService.cache.SetUsage(wsUUID, featureCode, used); err != nil {
+		if cached := entitlementService.cache.SetUsage(wsUUID, featureCode, used); !cached.OK {
 			return 0, false
 		}
 	}

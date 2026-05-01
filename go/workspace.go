@@ -5,6 +5,8 @@ package tenant
 import (
 	"context"
 	"time"
+
+	"dappco.re/go"
 )
 
 // Workspace is the tenancy boundary. All resources belong to a workspace.
@@ -63,14 +65,14 @@ func (c WorkspaceContext) WithUser(user *User) WorkspaceContext {
 // Workspace resolves the workspace from the holder context.
 //
 //	ws, err := tenant.WorkspaceContext{Context: ctx}.Workspace()
-func (c WorkspaceContext) Workspace() (*Workspace, error) {
+func (c WorkspaceContext) Workspace() core.Result {
 	return WorkspaceFromCtx(c.baseContext())
 }
 
 // User resolves the user from the holder context.
 //
 //	user, err := tenant.WorkspaceContext{Context: ctx}.User()
-func (c WorkspaceContext) User() (*User, error) {
+func (c WorkspaceContext) User() core.Result {
 	return UserFromCtx(c.baseContext())
 }
 
@@ -85,17 +87,17 @@ const (
 // WorkspaceFromCtx retrieves the current workspace from context.
 // Returns ErrNoWorkspaceContext if no workspace was injected.
 //
-//	ws, err := tenant.WorkspaceFromCtx(ctx)
-//	if err != nil { return core.E("tenant", "no workspace context", err) }
-func WorkspaceFromCtx(ctx context.Context) (*Workspace, error) {
+//	r := tenant.WorkspaceFromCtx(ctx)
+//	if !r.OK { return r }
+func WorkspaceFromCtx(ctx context.Context) core.Result {
 	if ctx == nil {
-		return nil, ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
 	ws, _ := ctx.Value(workspaceContextKey).(*Workspace)
 	if ws == nil {
-		return nil, ErrNoWorkspaceContext
+		return core.Fail(ErrNoWorkspaceContext)
 	}
-	return ws, nil
+	return core.Ok(ws)
 }
 
 // WithWorkspace returns a new context carrying the workspace.

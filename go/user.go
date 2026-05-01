@@ -68,16 +68,16 @@ func (t UserTier) HasFeature(code string) bool {
 // UserFromCtx retrieves the authenticated user from context.
 // Returns ErrNoUserContext if no user was injected.
 //
-//	user, err := tenant.UserFromCtx(ctx)
-func UserFromCtx(ctx context.Context) (*User, error) {
+//	r := tenant.UserFromCtx(ctx)
+func UserFromCtx(ctx context.Context) core.Result {
 	if ctx == nil {
-		return nil, ErrNoUserContext
+		return core.Fail(ErrNoUserContext)
 	}
 	user, _ := ctx.Value(userContextKey).(*User)
 	if user == nil {
-		return nil, ErrNoUserContext
+		return core.Fail(ErrNoUserContext)
 	}
-	return user, nil
+	return core.Ok(user)
 }
 
 // WithUser returns a new context carrying the user.
