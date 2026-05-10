@@ -94,8 +94,8 @@ func (c *TenantCache) readJSON(group, key string, target any) bool {
 	if c == nil || c.store == nil {
 		return false
 	}
-	value, err := c.store.Get(group, key)
-	if err != nil {
+	value, result := c.store.Get(group, key)
+	if !result.OK {
 		return false
 	}
 	return core.JSONUnmarshalString(value, target).OK
@@ -108,8 +108,8 @@ func (c *TenantCache) readString(group, key string) (string, bool) {
 	if c == nil || c.store == nil {
 		return "", false
 	}
-	value, err := c.store.Get(group, key)
-	if err != nil {
+	value, result := c.store.Get(group, key)
+	if !result.OK {
 		return "", false
 	}
 	return value, true
