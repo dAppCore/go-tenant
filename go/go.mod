@@ -2,7 +2,7 @@ module dappco.re/go/tenant
 
 go 1.26.0
 
-require dappco.re/go v0.10.3
+require dappco.re/go v0.10.4
 
 require (
 	github.com/apache/arrow-go/v18 v18.1.0 // indirect
