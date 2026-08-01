@@ -73,7 +73,7 @@ func (c *TenantCache) persistJSON(group, key string, value any, ttl time.Duratio
 	if c == nil || c.store == nil {
 		return core.Ok(nil)
 	}
-	return core.ResultOf(nil, c.store.SetWithTTL(group, key, core.JSONMarshalString(value), ttl))
+	return c.store.SetWithTTL(group, key, core.JSONMarshalString(value), ttl)
 }
 
 // persistString writes a plain string value to go-store with the given TTL.
@@ -83,7 +83,7 @@ func (c *TenantCache) persistString(group, key, value string, ttl time.Duration)
 	if c == nil || c.store == nil {
 		return core.Ok(nil)
 	}
-	return core.ResultOf(nil, c.store.SetWithTTL(group, key, value, ttl))
+	return c.store.SetWithTTL(group, key, value, ttl)
 }
 
 // readJSON reads and deserialises a JSON value from go-store.
@@ -94,8 +94,8 @@ func (c *TenantCache) readJSON(group, key string, target any) bool {
 	if c == nil || c.store == nil {
 		return false
 	}
-	value, err := c.store.Get(group, key)
-	if err != nil {
+	value, result := c.store.Get(group, key)
+	if !result.OK {
 		return false
 	}
 	return core.JSONUnmarshalString(value, target).OK
@@ -108,8 +108,8 @@ func (c *TenantCache) readString(group, key string) (string, bool) {
 	if c == nil || c.store == nil {
 		return "", false
 	}
-	value, err := c.store.Get(group, key)
-	if err != nil {
+	value, result := c.store.Get(group, key)
+	if !result.OK {
 		return "", false
 	}
 	return value, true
@@ -122,7 +122,7 @@ func (c *TenantCache) deleteStoreGroup(group string) core.Result {
 	if c == nil || c.store == nil {
 		return core.Ok(nil)
 	}
-	return core.ResultOf(nil, c.store.DeleteGroup(group))
+	return c.store.DeleteGroup(group)
 }
 
 // deleteStorePrefix removes all entries whose group starts with the given prefix.
@@ -132,7 +132,7 @@ func (c *TenantCache) deleteStorePrefix(prefix string) core.Result {
 	if c == nil || c.store == nil {
 		return core.Ok(nil)
 	}
-	return core.ResultOf(nil, c.store.DeletePrefix(prefix))
+	return c.store.DeletePrefix(prefix)
 }
 
 func (c *TenantCache) now() time.Time {
