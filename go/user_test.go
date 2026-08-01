@@ -3,8 +3,6 @@
 package tenant
 
 import (
-	"context"
-
 	"dappco.re/go"
 )
 
@@ -45,13 +43,13 @@ func TestUser_UserTier_HasFeature_Ugly(t *core.T) {
 }
 
 func TestUser_UserFromCtx_Good(t *core.T) {
-	result := UserFromCtx(WithUser(context.Background(), testUser()))
+	result := UserFromCtx(WithUser(t.Context(), testUser()))
 	requireResultOK(t, result)
 	core.AssertEqual(t, "user-9", result.Value.(*User).UUID)
 }
 
 func TestUser_UserFromCtx_Bad(t *core.T) {
-	result := UserFromCtx(context.Background())
+	result := UserFromCtx(t.Context())
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoUserContext, result.Value)
 }
@@ -63,14 +61,14 @@ func TestUser_UserFromCtx_Ugly(t *core.T) {
 }
 
 func TestUser_WithUser_Good(t *core.T) {
-	ctx := WithUser(context.Background(), testUser())
+	ctx := WithUser(t.Context(), testUser())
 	result := UserFromCtx(ctx)
 	requireResultOK(t, result)
 	core.AssertEqual(t, "user-9", result.Value.(*User).UUID)
 }
 
 func TestUser_WithUser_Bad(t *core.T) {
-	ctx := WithUser(context.Background(), nil)
+	ctx := WithUser(t.Context(), nil)
 	result := UserFromCtx(ctx)
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoUserContext, result.Value)

@@ -77,10 +77,7 @@ func (r EntitlementResult) AsError() core.Result {
 func Allow(featureCode string, limit, used *int) EntitlementResult {
 	result := EntitlementResult{Allowed: true, FeatureCode: featureCode, Limit: limit, Used: used}
 	if limit != nil && used != nil {
-		remaining := *limit - *used
-		if remaining < 0 {
-			remaining = 0
-		}
+		remaining := max(*limit-*used, 0)
 		result.Remaining = &remaining
 	}
 	return result
@@ -92,10 +89,7 @@ func Allow(featureCode string, limit, used *int) EntitlementResult {
 func Deny(featureCode, reason string, limit, used *int) EntitlementResult {
 	result := EntitlementResult{Allowed: false, FeatureCode: featureCode, Reason: reason, Limit: limit, Used: used}
 	if limit != nil && used != nil {
-		remaining := *limit - *used
-		if remaining < 0 {
-			remaining = 0
-		}
+		remaining := max(*limit-*used, 0)
 		result.Remaining = &remaining
 	}
 	return result
@@ -304,10 +298,7 @@ func (entitlementService *localEntitlementService) GetUsageSummary(ctx context.C
 			ResetType:   feature.ResetType,
 		}
 		if limit != nil && used != nil {
-			remaining := *limit - *used
-			if remaining < 0 {
-				remaining = 0
-			}
+			remaining := max(*limit-*used, 0)
 			item.Remaining = &remaining
 		}
 		items = append(items, item)

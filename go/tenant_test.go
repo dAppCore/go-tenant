@@ -3,16 +3,17 @@
 package tenant
 
 import (
-	"context"
-
 	"dappco.re/go"
 )
 
-func testInt(value int) *int { return &value }
+//go:fix inline
+func testInt(value int) *int { return new(value) }
 
-func testInt64(value int64) *int64 { return &value }
+//go:fix inline
+func testInt64(value int64) *int64 { return new(value) }
 
-func testString(value string) *string { return &value }
+//go:fix inline
+func testString(value string) *string { return new(value) }
 
 func testWorkspace() *Workspace {
 	return &Workspace{ID: 7, UUID: "uuid-7", Slug: "acme", Name: "Acme", IsActive: true}
@@ -32,7 +33,7 @@ func testCache(t *core.T) (*TenantCache, *Workspace) {
 	requireResultOK(t, cache.SetWorkspace(workspace))
 	requireResultOK(t, cache.SetFeature(testLimitFeature()))
 	requireResultOK(t, cache.SetPackages(workspace.UUID, []Package{{
-		Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: testInt(10)}},
+		Code: "starter", IsActive: true, Features: []PackageFeature{{FeatureCode: "pages", LimitValue: new(10)}},
 	}}))
 	requireResultOK(t, cache.SetUsage(workspace.UUID, "pages", 3))
 	return cache, workspace
@@ -79,133 +80,133 @@ func TestTenant_Register_Ugly(t *core.T) {
 
 func TestTenant_Tenant_GetWorkspace_Good(t *core.T) {
 	tenantService, workspace := testTenant(t)
-	result := tenantService.GetWorkspace(context.Background(), workspace.Slug)
+	result := tenantService.GetWorkspace(t.Context(), workspace.Slug)
 	requireResultOK(t, result)
 	core.AssertEqual(t, workspace.UUID, result.Value.(*Workspace).UUID)
 }
 
 func TestTenant_Tenant_GetWorkspace_Bad(t *core.T) {
 	var tenantService *Tenant
-	result := tenantService.GetWorkspace(context.Background(), "missing")
+	result := tenantService.GetWorkspace(t.Context(), "missing")
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrWorkspaceNotFound, result.Value)
 }
 
 func TestTenant_Tenant_GetWorkspace_Ugly(t *core.T) {
 	tenantService := &Tenant{cache: NewTenantCache(nil)}
-	result := tenantService.GetWorkspace(context.Background(), "missing")
+	result := tenantService.GetWorkspace(t.Context(), "missing")
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrWorkspaceNotFound, result.Value)
 }
 
 func TestTenant_Tenant_GetWorkspaceByUUID_Good(t *core.T) {
 	tenantService, workspace := testTenant(t)
-	result := tenantService.GetWorkspaceByUUID(context.Background(), workspace.UUID)
+	result := tenantService.GetWorkspaceByUUID(t.Context(), workspace.UUID)
 	requireResultOK(t, result)
 	core.AssertEqual(t, workspace.Slug, result.Value.(*Workspace).Slug)
 }
 
 func TestTenant_Tenant_GetWorkspaceByUUID_Bad(t *core.T) {
 	var tenantService *Tenant
-	result := tenantService.GetWorkspaceByUUID(context.Background(), "missing")
+	result := tenantService.GetWorkspaceByUUID(t.Context(), "missing")
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrWorkspaceNotFound, result.Value)
 }
 
 func TestTenant_Tenant_GetWorkspaceByUUID_Ugly(t *core.T) {
 	tenantService := &Tenant{cache: NewTenantCache(nil)}
-	result := tenantService.GetWorkspaceByUUID(context.Background(), "")
+	result := tenantService.GetWorkspaceByUUID(t.Context(), "")
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrWorkspaceNotFound, result.Value)
 }
 
 func TestTenant_Tenant_GetWorkspaceByID_Good(t *core.T) {
 	tenantService, workspace := testTenant(t)
-	result := tenantService.GetWorkspaceByID(context.Background(), workspace.ID)
+	result := tenantService.GetWorkspaceByID(t.Context(), workspace.ID)
 	requireResultOK(t, result)
 	core.AssertEqual(t, workspace.UUID, result.Value.(*Workspace).UUID)
 }
 
 func TestTenant_Tenant_GetWorkspaceByID_Bad(t *core.T) {
 	var tenantService *Tenant
-	result := tenantService.GetWorkspaceByID(context.Background(), 404)
+	result := tenantService.GetWorkspaceByID(t.Context(), 404)
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrWorkspaceNotFound, result.Value)
 }
 
 func TestTenant_Tenant_GetWorkspaceByID_Ugly(t *core.T) {
 	tenantService := &Tenant{cache: NewTenantCache(nil)}
-	result := tenantService.GetWorkspaceByID(context.Background(), 0)
+	result := tenantService.GetWorkspaceByID(t.Context(), 0)
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrWorkspaceNotFound, result.Value)
 }
 
 func TestTenant_Tenant_GetUser_Good(t *core.T) {
 	tenantService, _ := testTenant(t)
-	result := tenantService.GetUser(WithUser(context.Background(), testUser()))
+	result := tenantService.GetUser(WithUser(t.Context(), testUser()))
 	requireResultOK(t, result)
 	core.AssertEqual(t, "user-9", result.Value.(*User).UUID)
 }
 
 func TestTenant_Tenant_GetUser_Bad(t *core.T) {
 	var tenantService *Tenant
-	result := tenantService.GetUser(context.Background())
+	result := tenantService.GetUser(t.Context())
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoUserContext, result.Value)
 }
 
 func TestTenant_Tenant_GetUser_Ugly(t *core.T) {
 	tenantService := &Tenant{cache: NewTenantCache(nil)}
-	result := tenantService.GetUser(context.Background())
+	result := tenantService.GetUser(t.Context())
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoUserContext, result.Value)
 }
 
 func TestTenant_Tenant_GetWorkspaceBySubdomain_Good(t *core.T) {
 	tenantService, workspace := testTenant(t)
-	result := tenantService.GetWorkspaceBySubdomain(context.Background(), "acme.host.uk.com")
+	result := tenantService.GetWorkspaceBySubdomain(t.Context(), "acme.host.uk.com")
 	requireResultOK(t, result)
 	core.AssertEqual(t, workspace.UUID, result.Value.(*Workspace).UUID)
 }
 
 func TestTenant_Tenant_GetWorkspaceBySubdomain_Bad(t *core.T) {
 	var tenantService *Tenant
-	result := tenantService.GetWorkspaceBySubdomain(context.Background(), "missing.host.uk.com")
+	result := tenantService.GetWorkspaceBySubdomain(t.Context(), "missing.host.uk.com")
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrWorkspaceNotFound, result.Value)
 }
 
 func TestTenant_Tenant_GetWorkspaceBySubdomain_Ugly(t *core.T) {
 	tenantService := &Tenant{cache: NewTenantCache(nil)}
-	result := tenantService.GetWorkspaceBySubdomain(context.Background(), "")
+	result := tenantService.GetWorkspaceBySubdomain(t.Context(), "")
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrWorkspaceNotFound, result.Value)
 }
 
 func TestTenant_Tenant_Can_Good(t *core.T) {
 	tenantService, workspace := testTenant(t)
-	result := tenantService.Can(context.Background(), workspace, "pages", 1)
+	result := tenantService.Can(t.Context(), workspace, "pages", 1)
 	core.AssertTrue(t, result.IsAllowed())
 	core.AssertEqual(t, "pages", result.FeatureCode)
 }
 
 func TestTenant_Tenant_Can_Bad(t *core.T) {
 	tenantService, _ := testTenant(t)
-	result := tenantService.Can(context.Background(), nil, "pages", 1)
+	result := tenantService.Can(t.Context(), nil, "pages", 1)
 	core.AssertTrue(t, result.IsDenied())
 	core.AssertEqual(t, "no workspace provided", result.Reason)
 }
 
 func TestTenant_Tenant_Can_Ugly(t *core.T) {
 	var tenantService *Tenant
-	result := tenantService.Can(context.Background(), testWorkspace(), "pages", 1)
+	result := tenantService.Can(t.Context(), testWorkspace(), "pages", 1)
 	core.AssertTrue(t, result.IsDenied())
 	core.AssertEqual(t, "tenant not configured", result.Reason)
 }
 
 func TestTenant_Tenant_RecordUsage_Good(t *core.T) {
 	tenantService, workspace := testTenant(t)
-	result := tenantService.RecordUsage(context.Background(), workspace, "pages", 2, testInt64(9), nil)
+	result := tenantService.RecordUsage(t.Context(), workspace, "pages", 2, testInt64(9), nil)
 	requireResultOK(t, result)
 	used, ok := tenantService.cache.GetUsage(workspace.UUID, "pages")
 	core.AssertTrue(t, ok)
@@ -214,35 +215,35 @@ func TestTenant_Tenant_RecordUsage_Good(t *core.T) {
 
 func TestTenant_Tenant_RecordUsage_Bad(t *core.T) {
 	var tenantService *Tenant
-	result := tenantService.RecordUsage(context.Background(), testWorkspace(), "pages", 1, nil, nil)
+	result := tenantService.RecordUsage(t.Context(), testWorkspace(), "pages", 1, nil, nil)
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoWorkspaceContext, result.Value)
 }
 
 func TestTenant_Tenant_RecordUsage_Ugly(t *core.T) {
 	tenantService, _ := testTenant(t)
-	result := tenantService.RecordUsage(context.Background(), nil, "pages", 1, nil, nil)
+	result := tenantService.RecordUsage(t.Context(), nil, "pages", 1, nil, nil)
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoWorkspaceContext, result.Value)
 }
 
 func TestTenant_Tenant_GetUsageSummary_Good(t *core.T) {
 	tenantService, workspace := testTenant(t)
-	result := tenantService.GetUsageSummary(context.Background(), workspace)
+	result := tenantService.GetUsageSummary(t.Context(), workspace)
 	requireResultOK(t, result)
 	core.AssertEqual(t, "pages", result.Value.([]UsageSummaryItem)[0].FeatureCode)
 }
 
 func TestTenant_Tenant_GetUsageSummary_Bad(t *core.T) {
 	var tenantService *Tenant
-	result := tenantService.GetUsageSummary(context.Background(), testWorkspace())
+	result := tenantService.GetUsageSummary(t.Context(), testWorkspace())
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoWorkspaceContext, result.Value)
 }
 
 func TestTenant_Tenant_GetUsageSummary_Ugly(t *core.T) {
 	tenantService, _ := testTenant(t)
-	result := tenantService.GetUsageSummary(context.Background(), nil)
+	result := tenantService.GetUsageSummary(t.Context(), nil)
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoWorkspaceContext, result.Value)
 }
@@ -311,13 +312,13 @@ func TestTenant_Tenant_CheckUsageAlerts_Good(t *core.T) {
 	tenantService, workspace := testTenant(t)
 	count := 0
 	tenantService.OnUsageAlert(func(UsageAlert) { count++ })
-	tenantService.CheckUsageAlerts(workspace, "pages", Deny("pages", "limit", testInt(10), testInt(8)))
+	tenantService.CheckUsageAlerts(workspace, "pages", Deny("pages", "limit", new(10), new(8)))
 	core.AssertEqual(t, 1, count)
 }
 
 func TestTenant_Tenant_CheckUsageAlerts_Bad(t *core.T) {
 	var tenantService *Tenant
-	tenantService.CheckUsageAlerts(testWorkspace(), "pages", Allow("pages", testInt(10), testInt(8)))
+	tenantService.CheckUsageAlerts(testWorkspace(), "pages", Allow("pages", new(10), new(8)))
 	core.AssertNil(t, tenantService)
 }
 

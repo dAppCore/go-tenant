@@ -2,7 +2,10 @@
 
 package tenant
 
-import "time"
+import (
+	"maps"
+	"time"
+)
 
 // UsageRecord tracks consumption of a limit-based feature.
 // Written after a successful operation — never before.
@@ -82,9 +85,7 @@ func cloneMetadata(metadata map[string]any) map[string]any {
 		return nil
 	}
 	clone := make(map[string]any, len(metadata))
-	for key, value := range metadata {
-		clone[key] = value
-	}
+	maps.Copy(clone, metadata)
 	return clone
 }
 

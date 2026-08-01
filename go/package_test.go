@@ -5,14 +5,14 @@ package tenant
 import "dappco.re/go"
 
 func TestPackage_Package_GetFeatureLimit_Good(t *core.T) {
-	pkg := Package{Features: []PackageFeature{{FeatureCode: "pages", LimitValue: testInt(10)}}}
+	pkg := Package{Features: []PackageFeature{{FeatureCode: "pages", LimitValue: new(10)}}}
 	limit := pkg.GetFeatureLimit("pages")
 	core.AssertNotNil(t, limit)
 	core.AssertEqual(t, 10, *limit)
 }
 
 func TestPackage_Package_GetFeatureLimit_Bad(t *core.T) {
-	pkg := Package{Features: []PackageFeature{{FeatureCode: "pages", LimitValue: testInt(10)}}}
+	pkg := Package{Features: []PackageFeature{{FeatureCode: "pages", LimitValue: new(10)}}}
 	limit := pkg.GetFeatureLimit("missing")
 	core.AssertNil(t, limit)
 	core.AssertEqual(t, 1, len(pkg.Features))

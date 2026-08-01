@@ -4,6 +4,7 @@ package tenant
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"dappco.re/go"
@@ -124,9 +125,7 @@ func cloneWorkspace(ws *Workspace) *Workspace {
 	clone := *ws
 	if ws.Settings != nil {
 		clone.Settings = make(map[string]any, len(ws.Settings))
-		for key, value := range ws.Settings {
-			clone.Settings[key] = value
-		}
+		maps.Copy(clone.Settings, ws.Settings)
 	}
 	return &clone
 }

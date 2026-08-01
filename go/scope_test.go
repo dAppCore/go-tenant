@@ -83,7 +83,7 @@ func TestScope_WorkspaceScope_Middleware_Ugly(t *core.T) {
 
 func TestScope_WorkspaceScope_RequireWorkspace_Good(t *core.T) {
 	scope := NewWorkspaceScope(nil)
-	req := httptest.NewRequest(http.MethodGet, "/resource", nil).WithContext(WithWorkspace(context.Background(), testWorkspace()))
+	req := httptest.NewRequest(http.MethodGet, "/resource", nil).WithContext(WithWorkspace(t.Context(), testWorkspace()))
 	rec := httptest.NewRecorder()
 	scope.RequireWorkspace()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
@@ -112,7 +112,7 @@ func TestScope_WorkspaceScope_RequireWorkspace_Ugly(t *core.T) {
 func TestScope_WorkspaceScope_ScopeFunc_Good(t *core.T) {
 	tenantService, _ := testTenant(t)
 	scope := NewWorkspaceScope(tenantService)
-	result := scope.ScopeFunc(context.Background(), "acme", func(ctx context.Context) core.Result {
+	result := scope.ScopeFunc(t.Context(), "acme", func(ctx context.Context) core.Result {
 		return WorkspaceFromCtx(ctx)
 	})
 	requireResultOK(t, result)
@@ -121,14 +121,14 @@ func TestScope_WorkspaceScope_ScopeFunc_Good(t *core.T) {
 
 func TestScope_WorkspaceScope_ScopeFunc_Bad(t *core.T) {
 	var scope *WorkspaceScope
-	result := scope.ScopeFunc(context.Background(), "acme", func(context.Context) core.Result { return core.Ok(nil) })
+	result := scope.ScopeFunc(t.Context(), "acme", func(context.Context) core.Result { return core.Ok(nil) })
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoWorkspaceContext, result.Value)
 }
 
 func TestScope_WorkspaceScope_ScopeFunc_Ugly(t *core.T) {
 	scope := NewWorkspaceScope(&Tenant{})
-	result := scope.ScopeFunc(context.Background(), "missing", func(context.Context) core.Result { return core.Ok(nil) })
+	result := scope.ScopeFunc(t.Context(), "missing", func(context.Context) core.Result { return core.Ok(nil) })
 	requireResultFail(t, result)
 	core.AssertEqual(t, ErrNoWorkspaceContext, result.Value)
 }
