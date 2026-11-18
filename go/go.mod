@@ -1,8 +1,8 @@
-module dappco.re/go/tenant
+module github.com/dappcore/go-tenant/go
 
 go 1.26.0
 
-require dappco.re/go v0.12.0
+require github.com/dappcore/go v0.13.0
 
 require (
 	github.com/apache/arrow-go/v18 v18.7.0 // indirect
@@ -30,7 +30,7 @@ require (
 )
 
 require (
-	dappco.re/go/store v0.14.1
+	github.com/dappcore/go-store/go v0.15.0
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.19.1 // indirect

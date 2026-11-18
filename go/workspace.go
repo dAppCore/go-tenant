@@ -7,7 +7,7 @@ import (
 	"maps"
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // Workspace is the tenancy boundary. All resources belong to a workspace.

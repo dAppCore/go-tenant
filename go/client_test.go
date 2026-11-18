@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 func testTenantServer(status int, body string) *httptest.Server {

@@ -2,7 +2,7 @@
 
 package tenant
 
-import "dappco.re/go"
+import "github.com/dappcore/go"
 
 func TestCache_NewTenantCache_Good(t *core.T) {
 	cache := NewTenantCache(nil)

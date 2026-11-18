@@ -5,7 +5,7 @@ package tenant
 import (
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 func TestBoost_Boost_IsUsable_Good(t *core.T) {

@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // expire forces every in-memory cache entry to be treated as stale so the

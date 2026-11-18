@@ -6,7 +6,7 @@ import (
 	"context"
 	"net/http"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // WorkspaceScope resolves and injects workspace context for HTTP handlers.

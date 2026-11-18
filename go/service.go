@@ -24,7 +24,7 @@
 package tenant
 
 import (
-	core "dappco.re/go"
+	core "github.com/dappcore/go"
 )
 
 // NewService returns a factory that constructs a *Tenant with the given

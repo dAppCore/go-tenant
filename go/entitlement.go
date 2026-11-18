@@ -6,7 +6,7 @@ import (
 	"context"
 	"sort"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // EntitlementResult is the value object returned by every entitlement check.

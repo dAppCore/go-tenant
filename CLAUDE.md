@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Multi-tenancy, workspace isolation, user identity, feature entitlements, and usage tracking for CoreGO services. Go consumer of the PHP `core-tenant` REST API with go-store backed caching. Module: `dappco.re/go/core/tenant`
+Multi-tenancy, workspace isolation, user identity, feature entitlements, and usage tracking for CoreGO services. Go consumer of the PHP `core-tenant` REST API with go-store backed caching. Module: `github.com/dappcore/go-tenant/go`
 
 ## Spec
 

@@ -2,7 +2,7 @@
 
 package tenant
 
-import "dappco.re/go"
+import "github.com/dappcore/go"
 
 func TestPackage_Package_GetFeatureLimit_Good(t *core.T) {
 	pkg := Package{Features: []PackageFeature{{FeatureCode: "pages", LimitValue: new(10)}}}

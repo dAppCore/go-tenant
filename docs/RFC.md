@@ -1,5 +1,5 @@
 ---
-module: dappco.re/go/core/tenant
+module: github.com/dappcore/go-tenant/go
 repo: core/go-tenant
 lang: go
 tier: lib
@@ -19,7 +19,7 @@ tags:
 
 > An agent should be able to implement this library from this document alone.
 
-**Module:** `dappco.re/go/core/tenant`
+**Module:** `github.com/dappcore/go-tenant/go`
 **Repository:** `core/go-tenant`
 **Files:** 14
 

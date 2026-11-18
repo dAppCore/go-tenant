@@ -3,7 +3,7 @@
 package tenant
 
 import (
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 func TestEntitlement_EntitlementResult_IsAllowed_Good(t *core.T) {

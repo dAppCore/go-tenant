@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"dappco.re/go"
-	"dappco.re/go/store"
+	"github.com/dappcore/go"
+	"github.com/dappcore/go-store/go"
 )
 
 // TTL constants matching PHP's cache configuration.

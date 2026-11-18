@@ -6,7 +6,7 @@ import (
 	"context"
 	"net/http"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 func ExampleNewWorkspaceScope() {

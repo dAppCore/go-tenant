@@ -2,7 +2,7 @@
 
 package tenant
 
-import "dappco.re/go"
+import "github.com/dappcore/go"
 
 // Sentinel errors for the tenant package.
 

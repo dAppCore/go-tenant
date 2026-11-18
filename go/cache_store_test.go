@@ -3,8 +3,8 @@
 package tenant
 
 import (
-	"dappco.re/go"
-	"dappco.re/go/store"
+	"github.com/dappcore/go"
+	"github.com/dappcore/go-store/go"
 )
 
 // testStore opens an in-memory go-store for the store-backed cache paths.
