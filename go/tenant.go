@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // Tenant is the root service. Register once per application instance.

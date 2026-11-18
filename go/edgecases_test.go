@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 func TestEdge_cloneWorkspace_Good(t *core.T) {

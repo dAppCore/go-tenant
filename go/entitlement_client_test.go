@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // apiResponses maps request paths to JSON bodies for a routing test server.

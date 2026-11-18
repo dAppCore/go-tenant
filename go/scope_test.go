@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 func TestScope_NewWorkspaceScope_Good(t *core.T) {

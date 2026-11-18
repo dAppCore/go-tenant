@@ -3,7 +3,7 @@
 package tenant
 
 import (
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 //go:fix inline

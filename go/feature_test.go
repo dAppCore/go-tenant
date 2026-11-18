@@ -2,7 +2,7 @@
 
 package tenant
 
-import "dappco.re/go"
+import "github.com/dappcore/go"
 
 func TestFeature_Feature_IsBoolean_Good(t *core.T) {
 	feature := Feature{Type: FeatureTypeBoolean}

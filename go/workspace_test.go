@@ -3,7 +3,7 @@
 package tenant
 
 import (
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 func TestWorkspace_WorkspaceContext_WithWorkspace_Good(t *core.T) {

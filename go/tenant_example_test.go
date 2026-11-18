@@ -5,7 +5,7 @@ package tenant
 import (
 	"context"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 func ExampleRegister() {

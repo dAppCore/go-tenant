@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // User is the authenticated identity. Tier controls feature access for personal namespaces.

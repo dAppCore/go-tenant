@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // testHangingServer returns a server that sleeps long enough to trip a short

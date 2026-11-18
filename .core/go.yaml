@@ -8,6 +8,6 @@ project:
   type: go
 
 go:
-  module: dappco.re/go/tenant
+  module: github.com/dappcore/go-tenant/go
   subtree: go
   go_version: "1.26.0"

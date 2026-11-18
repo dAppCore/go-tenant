@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"dappco.re/go"
+	"github.com/dappcore/go"
 )
 
 // clientBackedTenant wires a Tenant with an empty cache to a routing test

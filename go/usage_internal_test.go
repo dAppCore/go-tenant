@@ -2,7 +2,7 @@
 
 package tenant
 
-import "dappco.re/go"
+import "github.com/dappcore/go"
 
 func TestUsageInternal_newUsageRecord_Good(t *core.T) {
 	record := newUsageRecord(7, "Pages", 2, testInt64(9), map[string]any{"page_id": 42})
